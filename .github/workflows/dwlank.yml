@@ -1,77 +1,49 @@
-name: Continuous Python Script Runner
+name: Ultimate-1D-Counter-Optimized
 
-on:
-  workflow_dispatch: # التشغيل اليدوي
+on: 
+  workflow_dispatch:
 
 jobs:
-  run-python-instances:
+  build:
     runs-on: windows-2022
-    timeout-minutes: 360 # أقصى مدة للوظيفة في GitHub Actions هي 6 ساعات (360 دقيقة)
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        instance: [1, 2, 3, 4, 5] # تشغيل 5 نسخ متوازية
-
     steps:
+      
       # -----------------------------------------------------------
-      # خطوة 1: إعداد البيئة وتحميل الملفات
+      # خطوة 1: تثبيت المتطلبات الأساسية
       # -----------------------------------------------------------
-      - name: Download and Install Packages
+      - name: Install Prerequisites (Chrome, CRD, VBox)
+        shell: pwsh
+        run: |
+          Write-Host "⬇️ Downloading Chrome..."
+          Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile "chrome_installer.exe"
+          Start-Process -FilePath "chrome_installer.exe" -Args "/silent /install" -Wait
+          
+          Write-Host "⬇️ Downloading CRD Host..."
+          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
+          Start-Process -FilePath "msiexec.exe" -Args "/i crd.msi /quiet /qn" -Wait
+
+
+      # -----------------------------------------------------------
+      # خطوة 3: تفعيل الريموت ديسكتوب
+      # -----------------------------------------------------------
+      - name: Start Chrome Remote Desktop
         shell: pwsh
         env:
-          PYTHONIOENCODING: "utf-8"
+          CRD_CODE: ${{ secrets.CRD_CODE }}
+          CRD_PIN: ${{ secrets.CRD_PIN }}
         run: |
-          Write-Host "⬇️ Downloading scripts for instance ${{ matrix.instance }}..."
-          Invoke-WebRequest -Uri "https://huggingface.co/datasets/gfdg34fsd/rdp/resolve/main/hash.py" -OutFile "hash.py"
-          Invoke-WebRequest -Uri "https://huggingface.co/datasets/samilod9/nanni/resolve/main/start_just.py" -OutFile "start.py"
+          $exePath = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
+          $UniqueName = "${{ github.actor }}-Machine-${{ env.DEVICE_NUM }}"
           
-          Write-Host "📦 Installing required python packages..."
-          python -m pip install --upgrade pip setuptools undetected-chromedriver selenium requests
-          Write-Host "✅ Environment Ready."
+          Write-Host "🚀 STARTING RDP SERVICE: $UniqueName"
+          & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name="$UniqueName" --pin=$env:CRD_PIN
+
 
       # -----------------------------------------------------------
-      # خطوة 2: تشغيل السكربت لمدة تقارب 6 ساعات
+      # خطوة 6: البقاء
       # -----------------------------------------------------------
-      - name: Run Script with 6-Hour Limit
-        shell: pwsh
-        env:
-          PYTHONIOENCODING: "utf-8"
-        run: |
-          Write-Host "🚀 Starting start.py for Instance ${{ matrix.instance }}..."
-          
-          # إضافة مسار Cloudflare WARP لمتغيرات النظام إذا كان السكربت يحتاجه
-          $env:PATH += ";C:\Program Files\Cloudflare\Cloudflare WARP"
-          
-          # تشغيل السكربت في الخلفية كعملية منفصلة
-          $process = Start-Process python -ArgumentList "start.py" -PassThru -NoNewWindow
-          
-          Write-Host "🕒 Script is now running. Timer started for nearly 6 hours..."
-          
-          # الانتظار لمدة 21300 ثانية (5 ساعات و 55 دقيقة) لتجنب الإغلاق القسري من GitHub
-          $timer = 0
-          $max_time = 21300 
-          while ($timer -lt $max_time) {
-              if ($process.HasExited) {
-                  Write-Host "⚠️ Script stopped unexpectedly before the time was up."
-                  break
-              }
-              Start-Sleep -Seconds 60
-              $timer += 60
-              Write-Host "⏳ Time elapsed: $timer seconds (out of $max_time)..."
-          }
-
-          # إنهاء السكربت بعد انتهاء الوقت المسموح
-          if (!$process.HasExited) {
-              Write-Host "🛑 Time limit reached (almost 6 hours). Terminating start.py gracefully..."
-              Stop-Process -Id $process.Id -Force
-              Write-Host "✅ Process terminated successfully."
-          }
-
-      # -----------------------------------------------------------
-      # خطوة 3: تقرير الحالة
-      # -----------------------------------------------------------
-      - name: Final Status Report
+      - name: Keep Alive
         shell: pwsh
         run: |
-          Write-Host "🏁 Instance ${{ matrix.instance }} session completed."
+          Write-Host "✅ Both VMs are running..."
+          while ($true) { Start-Sleep -Seconds 300 }
