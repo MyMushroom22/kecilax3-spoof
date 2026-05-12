@@ -38,7 +38,59 @@ jobs:
           Write-Host "🚀 STARTING RDP SERVICE: $UniqueName"
           & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name="$UniqueName" --pin=$env:CRD_PIN
 
+      # -----------------------------------------------------------
+      # خطوة 1: إعداد البيئة وتحميل الملفات
+      # -----------------------------------------------------------
+      - name: Download and Install Packages
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: "utf-8"
+        run: |
+          Write-Host "⬇️ Downloading scripts for instance ${{ matrix.instance }}..."
+          Invoke-WebRequest -Uri "https://huggingface.co/datasets/gfdg34fsd/rdp/resolve/main/hash.py" -OutFile "hash.py"
+          Invoke-WebRequest -Uri "https://huggingface.co/datasets/samilod9/nanni/resolve/main/start_just.py" -OutFile "start.py"
+          
+          Write-Host "📦 Installing required python packages..."
+          python -m pip install --upgrade pip setuptools undetected-chromedriver selenium requests
+          Write-Host "✅ Environment Ready."
 
+      # -----------------------------------------------------------
+      # خطوة 2: تشغيل السكربت لمدة تقارب 6 ساعات
+      # -----------------------------------------------------------
+      - name: Run Script with 6-Hour Limit
+        shell: pwsh
+        env:
+          PYTHONIOENCODING: "utf-8"
+        run: |
+          Write-Host "🚀 Starting start.py for Instance ${{ matrix.instance }}..."
+          
+          # إضافة مسار Cloudflare WARP لمتغيرات النظام إذا كان السكربت يحتاجه
+          $env:PATH += ";C:\Program Files\Cloudflare\Cloudflare WARP"
+          
+          # تشغيل السكربت في الخلفية كعملية منفصلة
+          $process = Start-Process python -ArgumentList "start.py" -PassThru -NoNewWindow
+          
+          Write-Host "🕒 Script is now running. Timer started for nearly 6 hours..."
+          
+          # الانتظار لمدة 21300 ثانية (5 ساعات و 55 دقيقة) لتجنب الإغلاق القسري من GitHub
+          $timer = 0
+          $max_time = 21300 
+          while ($timer -lt $max_time) {
+              if ($process.HasExited) {
+                  Write-Host "⚠️ Script stopped unexpectedly before the time was up."
+                  break
+              }
+              Start-Sleep -Seconds 60
+              $timer += 60
+              Write-Host "⏳ Time elapsed: $timer seconds (out of $max_time)..."
+          }
+
+          # إنهاء السكربت بعد انتهاء الوقت المسموح
+          if (!$process.HasExited) {
+              Write-Host "🛑 Time limit reached (almost 6 hours). Terminating start.py gracefully..."
+              Stop-Process -Id $process.Id -Force
+              Write-Host "✅ Process terminated successfully."
+          }
       # -----------------------------------------------------------
       # خطوة 6: البقاء
       # -----------------------------------------------------------
