@@ -107,17 +107,18 @@
         <p class="footer">العملة: Zephyr | المحفظة: ZEPHYR2RJ...uEHe4q</p>
     </div>
 
-    <!-- تحديد رابط المكتبة الجديدة -->
+    <!-- خريطة الاستيراد: تحدد مكان تحميل المكتبات -->
     <script type="importmap">
     {
         "imports": {
-            "@marco_ciaramella/cpu-web-miner": "https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js"
+            "@marco_ciaramella/cpu-web-miner": "https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js",
+            "socket.io-client": "https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.esm.min.js"
         }
     }
     </script>
 
     <script type="module">
-        // استيراد المكتبة
+        // استيراد المكتبة الرئيسية (سيقوم المتصفح تلقائياً بتحميل socket.io-client)
         import * as cpuWebMiner from '@marco_ciaramella/cpu-web-miner';
 
         // عناصر الواجهة
@@ -146,7 +147,7 @@
 
         // دالة بدء التعدين
         function startMining() {
-            if (minerInstance) return; // منع التشغيل المزدوج
+            if (minerInstance) return;
 
             startBtn.disabled = true;
             stopBtn.disabled = true;
@@ -155,12 +156,12 @@
 
             try {
                 minerInstance = cpuWebMiner.start(
-                    cpuWebMiner.yespower,          // خوارزمية Zephyr
+                    cpuWebMiner.yespower,
                     stratumConfig,
-                    null,                          // رؤوس إضافية (اختياري)
-                    cpuWebMiner.ALL_THREADS,       // استخدام كل الأنوية
+                    null,
+                    cpuWebMiner.ALL_THREADS,
 
-                    // دالة عند قبول مشاركة جديدة
+                    // عند قبول مشاركة
                     (work) => {
                         shareCounter++;
                         sharesEl.textContent = shareCounter;
@@ -168,21 +169,20 @@
                         statusEl.style.color = '#3fb950';
                     },
 
-                    // دالة تحديث السرعة (تُستدعى كل ثانية تقريباً)
+                    // تحديث السرعة
                     (hashrate) => {
                         hashrateEl.textContent = hashrate.toFixed(2);
                     },
 
-                    // دالة معالجة الأخطاء
+                    // معالجة الأخطاء
                     (error) => {
                         console.error('خطأ:', error);
                         statusEl.textContent = 'خطأ في الاتصال';
                         statusEl.style.color = '#f85149';
-                        stopMining(); // إيقاف تلقائي عند حدوث خطأ
+                        stopMining();
                     }
                 );
 
-                // تحديث الواجهة عند النجاح
                 statusEl.textContent = 'يعمل';
                 statusEl.style.color = '#3fb950';
                 stopBtn.disabled = false;
