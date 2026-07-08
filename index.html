@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تعدين Zephyr</title>
+    <title>تعدين Zephyr - CPU</title>
     <style>
-        body { font-family: Arial; background: #0d1117; color: #e6edf3; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        body { font-family: Arial, sans-serif; background: #0d1117; color: #e6edf3; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
         .container { background: #161b22; padding: 30px; border-radius: 12px; border: 1px solid #30363d; width: 340px; text-align: center; }
         h2 { color: #f0883e; }
         .stat { background: #0d1117; padding: 12px; border-radius: 8px; margin: 15px 0; }
@@ -33,20 +33,21 @@
         </div>
         <button id="startBtn">▶ بدء التعدين</button>
         <button id="stopBtn" disabled>⏹ إيقاف</button>
-        <div id="msg" class="msg warn">⏳ جاري تحميل المكتبة...</div>
+        <div id="msg" class="msg warn">⏳ جاري التحميل...</div>
     </div>
 
-    <!-- 🔹 جرب أحد الروابط التالية (اختر واحداً فقط) -->
-    <!-- الخيار 1 (موصى به) -->
-    <script src="https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js"></script>
-    
-    <!-- الخيار 2 (بديل) -->
-    <!-- <script src="https://raw.githubusercontent.com/andersonmfjr/webminer/master/webminer.js"></script> -->
-    
-    <!-- الخيار 3 (آخر بديل) -->
-    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/webminer/1.0.0/webminer.min.js"></script> -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@marco_ciaramella/cpu-web-miner": "https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js",
+            "socket.io-client": "https://cdn.socket.io/4.7.5/socket.io.esm.min.js"
+        }
+    }
+    </script>
 
-    <script>
+    <script type="module">
+        import * as cpuWebMiner from '@marco_ciaramella/cpu-web-miner';
+
         const statusEl = document.getElementById('status');
         const hashrateEl = document.getElementById('hashrate');
         const sharesEl = document.getElementById('shares');
@@ -55,10 +56,18 @@
         const msgEl = document.getElementById('msg');
 
         const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
-        const WORKER = "Worker_Runner_Node";
+        const WORKER_NAME = "Worker_Runner_Node";
 
-        let miner = null;
-        let interval = null;
+        const stratumConfig = {
+            server: "zephyr.herominers.com",
+            port: 1123,
+            worker: `${WALLET}.${WORKER_NAME}`,
+            password: "x",
+            ssl: false
+        };
+
+        let minerInstance = null;
+        let shareCounter = 0;
 
         function setMsg(text, type = 'ok') {
             msgEl.textContent = text;
@@ -66,55 +75,59 @@
         }
 
         function startMining() {
-            // التحقق من وجود المكتبة
-            if (typeof WebMiner === 'undefined') {
-                setMsg('❌ المكتبة لم تحمل. تأكد من اتصالك بالإنترنت أو جرب رابطاً بديلاً.', 'err');
-                return;
-            }
+            if (minerInstance) return;
+
+            startBtn.disabled = true;
+            stopBtn.disabled = true;
+            statusEl.textContent = 'جاري الاتصال...';
+            statusEl.style.color = '#58a6ff';
+            setMsg('⏳ جاري الاتصال بالخادم...', 'warn');
 
             try {
-                miner = new WebMiner({
-                    host: 'zephyr.herominers.com',
-                    port: 1123,
-                    wallet: WALLET,
-                    worker: WORKER,
-                    password: 'x',
-                    threads: navigator.hardwareConcurrency || 2
-                });
-
-                miner.start();
-
+                minerInstance = cpuWebMiner.start(
+                    cpuWebMiner.yespower,
+                    stratumConfig,
+                    null,
+                    cpuWebMiner.ALL_THREADS,
+                    (work) => {
+                        shareCounter++;
+                        sharesEl.textContent = shareCounter;
+                        statusEl.textContent = 'يعمل';
+                        statusEl.style.color = '#3fb950';
+                        setMsg('✅ يعمل', 'ok');
+                    },
+                    (hashrate) => {
+                        hashrateEl.textContent = hashrate.toFixed(2);
+                    },
+                    (error) => {
+                        console.error('خطأ:', error);
+                        statusEl.textContent = 'خطأ';
+                        statusEl.style.color = '#f85149';
+                        setMsg('❌ خطأ: ' + (error.message || 'فشل الاتصال'), 'err');
+                        stopMining();
+                    }
+                );
                 statusEl.textContent = 'يعمل';
                 statusEl.style.color = '#3fb950';
-                startBtn.disabled = true;
                 stopBtn.disabled = false;
+                startBtn.disabled = true;
                 setMsg('✅ جاري التعدين...', 'ok');
-
-                if (interval) clearInterval(interval);
-                interval = setInterval(() => {
-                    if (miner) {
-                        const hr = miner.getHashrate();
-                        if (hr) hashrateEl.textContent = (hr / 1000).toFixed(2);
-                        const s = miner.getShares();
-                        if (s) sharesEl.textContent = s;
-                    }
-                }, 1000);
-
-            } catch (e) {
-                setMsg('❌ خطأ: ' + e.message, 'err');
-                statusEl.textContent = 'خطأ';
+            } catch (error) {
+                console.error('فشل الإقلاع:', error);
+                statusEl.textContent = 'فشل البدء';
                 statusEl.style.color = '#f85149';
+                setMsg('❌ فشل البدء: ' + error.message, 'err');
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
+                minerInstance = null;
             }
         }
 
         function stopMining() {
-            if (miner) {
-                try { miner.stop(); } catch(e) {}
-                miner = null;
+            if (minerInstance) {
+                try { minerInstance.stop(); } catch (e) {}
+                minerInstance = null;
             }
-            if (interval) clearInterval(interval);
             statusEl.textContent = 'متوقف';
             statusEl.style.color = '#f0883e';
             hashrateEl.textContent = '0.00';
@@ -125,32 +138,10 @@
 
         startBtn.addEventListener('click', startMining);
         stopBtn.addEventListener('click', stopMining);
+        window.addEventListener('beforeunload', () => { if (minerInstance) minerInstance.stop(); });
 
-        window.addEventListener('beforeunload', () => {
-            if (miner) try { miner.stop(); } catch(e) {}
-            if (interval) clearInterval(interval);
-        });
-
-        // التحقق من تحميل المكتبة
-        function checkLibrary() {
-            if (typeof WebMiner !== 'undefined') {
-                setMsg('✅ المكتبة جاهزة، اضغط "بدء التعدين"', 'ok');
-                return true;
-            } else {
-                setMsg('⚠️ المكتبة لم تحمل بعد. انتظر أو حاول تحديث الصفحة.', 'warn');
-                return false;
-            }
-        }
-
-        // فحص فوري
-        checkLibrary();
-
-        // إعادة المحاولة بعد 5 ثوانٍ
-        setTimeout(() => {
-            if (typeof WebMiner === 'undefined') {
-                setMsg('❌ فشل تحميل المكتبة. حاول تغيير رابط المكتبة أو استخدم الاستضافة المحلية.', 'err');
-            }
-        }, 5000);
+        setMsg('✅ المكتبة جاهزة، اضغط "بدء التعدين"', 'ok');
+        console.log('✅ النظام جاهز.');
     </script>
 </body>
 </html>
