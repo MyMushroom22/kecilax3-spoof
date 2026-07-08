@@ -3,188 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تعدين Zephyr - CPU</title>
+    <title>تعدين Zephyr</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #121212; color: #e0e0e0; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: #1e1e1e; padding: 30px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.6); text-align: center; width: 320px; }
-        h2 { color: #ffa500; margin-bottom: 5px; }
-        .sub { color: #aaa; font-size: 14px; margin-bottom: 20px; }
-        .stats { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        .stats div { display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px; }
-        .stats .value { color: #fff; font-weight: bold; }
-        .hashrate { color: #ffa500; font-size: 20px; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 8px; transition: 0.2s; }
-        #startBtn { background: #2ea043; color: #fff; }
-        #startBtn:hover:not(:disabled) { background: #3fb950; }
+        body { font-family: Arial; background: #0d1117; color: #e6edf3; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: #161b22; padding: 30px; border-radius: 12px; border: 1px solid #30363d; width: 340px; text-align: center; }
+        h2 { color: #f0883e; }
+        .stat { background: #0d1117; padding: 12px; border-radius: 8px; margin: 15px 0; }
+        .stat div { display: flex; justify-content: space-between; padding: 5px 0; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 8px; }
+        #startBtn { background: #238636; color: #fff; }
+        #startBtn:hover:not(:disabled) { background: #2ea043; }
         #stopBtn { background: #da3633; color: #fff; }
         #stopBtn:hover:not(:disabled) { background: #f85149; }
-        button:disabled { opacity: 0.4; cursor: not-allowed; }
-        .footer { font-size: 11px; color: #666; margin-top: 15px; border-top: 1px solid #333; padding-top: 12px; }
-        .error-msg { color: #f85149; font-size: 13px; margin-top: 10px; display: none; }
-        .success-msg { color: #3fb950; font-size: 13px; margin-top: 10px; display: none; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .msg { margin-top: 10px; font-size: 14px; }
+        .ok { color: #3fb950; }
+        .err { color: #f85149; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>⚡ تعدين الخلفية</h2>
-        <p class="sub">يعمل على معالج جهازك (CPU)</p>
-        <div class="stats">
-            <div><span>الحالة</span><span id="status" class="value" style="color:#ffa500;">جاهز</span></div>
-            <div><span>سرعة التعدين</span><span><span id="hashrate" class="hashrate">0.00</span> KH/s</span></div>
-            <div><span>المشاركات</span><span id="shares" class="value">0</span></div>
+        <h2>⚡ تعدين Zephyr</h2>
+        <p style="color:#8b949e; font-size:14px;">يعمل على معالج جهازك</p>
+        <div class="stat">
+            <div><span>الحالة</span><span id="status" style="color:#f0883e;">جاهز</span></div>
+            <div><span>السرعة</span><span><span id="hashrate">0.00</span> KH/s</span></div>
+            <div><span>المشاركات</span><span id="shares">0</span></div>
         </div>
         <button id="startBtn">▶ بدء التعدين</button>
-        <button id="stopBtn" disabled>⏹ إيقاف التعدين</button>
-        <p id="errorMsg" class="error-msg"></p>
-        <p id="successMsg" class="success-msg"></p>
-        <p class="footer">العملة: Zephyr | المحفظة: ZEPHYR2RJ...uEHe4q</p>
+        <button id="stopBtn" disabled>⏹ إيقاف</button>
+        <div id="msg" class="msg ok">انتظر تحميل المكتبة...</div>
     </div>
 
-    <!-- تحميل مكتبة webminer المحدثة (تتصل مباشرة بخادم التعدين) -->
+    <!-- تحميل مكتبة webminer (تتصل مباشرة بخادم Stratum) -->
     <script src="https://cdn.jsdelivr.net/gh/andersonmfjr/webminer@master/webminer.js"></script>
 
     <script>
-        // عناصر الواجهة
         const statusEl = document.getElementById('status');
         const hashrateEl = document.getElementById('hashrate');
         const sharesEl = document.getElementById('shares');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
-        const errorMsg = document.getElementById('errorMsg');
-        const successMsg = document.getElementById('successMsg');
+        const msgEl = document.getElementById('msg');
 
-        // المحفظة واسم العامل
         const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
-        const WORKER_NAME = "Worker_Runner_Node";
+        const WORKER = "Worker_Runner_Node";
 
         let miner = null;
-        let shareCounter = 0;
-        let hashrateInterval = null;
+        let interval = null;
 
-        function showError(msg) {
-            errorMsg.style.display = 'block';
-            errorMsg.textContent = '⚠️ ' + msg;
-            successMsg.style.display = 'none';
-        }
-
-        function showSuccess(msg) {
-            successMsg.style.display = 'block';
-            successMsg.textContent = '✅ ' + msg;
-            errorMsg.style.display = 'none';
-        }
-
-        function hideMessages() {
-            errorMsg.style.display = 'none';
-            successMsg.style.display = 'none';
+        function setMsg(text, type = 'ok') {
+            msgEl.textContent = text;
+            msgEl.className = 'msg ' + type;
         }
 
         // دالة بدء التعدين
         function startMining() {
-            hideMessages();
-            
-            // التحقق من وجود المكتبة
             if (typeof WebMiner === 'undefined') {
-                showError('مكتبة التعدين لم يتم تحميلها. تأكد من اتصالك بالإنترنت.');
+                setMsg('المكتبة لم تحمل بعد، انتظر...', 'err');
                 return;
             }
 
             try {
-                // إنشاء كائن التعدين
                 miner = new WebMiner({
                     host: 'zephyr.herominers.com',
                     port: 1123,
                     wallet: WALLET,
-                    worker: WORKER_NAME,
+                    worker: WORKER,
                     password: 'x',
-                    threads: navigator.hardwareConcurrency || 2 // عدد أنوية المعالج
+                    threads: navigator.hardwareConcurrency || 2
                 });
 
-                // بدء التعدين
                 miner.start();
 
-                // تحديث الواجهة
                 statusEl.textContent = 'يعمل';
                 statusEl.style.color = '#3fb950';
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
-                showSuccess('جاري التعدين على خادم zephyr.herominers.com:1123');
+                setMsg('✅ جاري التعدين على zephyr.herominers.com:1123', 'ok');
 
-                // تحديث السرعة والمشاركات كل ثانية
-                if (hashrateInterval) clearInterval(hashrateInterval);
-                hashrateInterval = setInterval(() => {
+                // تحديث الإحصائيات كل ثانية
+                if (interval) clearInterval(interval);
+                interval = setInterval(() => {
                     if (miner) {
-                        // الحصول على السرعة (KH/s)
                         const hr = miner.getHashrate();
-                        if (hr !== undefined && hr !== null) {
-                            hashrateEl.textContent = (hr / 1000).toFixed(2); // تحويل إلى KH/s
-                        }
-                        
-                        // الحصول على عدد المشاركات
-                        const shares = miner.getShares();
-                        if (shares !== undefined && shares !== null) {
-                            shareCounter = shares;
-                            sharesEl.textContent = shareCounter;
-                        }
+                        if (hr) hashrateEl.textContent = (hr / 1000).toFixed(2);
+                        const s = miner.getShares();
+                        if (s) sharesEl.textContent = s;
                     }
                 }, 1000);
 
-            } catch (error) {
-                console.error('خطأ:', error);
-                showError('فشل بدء التعدين: ' + (error.message || 'خطأ غير معروف'));
+            } catch (e) {
+                setMsg('❌ خطأ: ' + e.message, 'err');
                 statusEl.textContent = 'خطأ';
                 statusEl.style.color = '#f85149';
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                miner = null;
             }
         }
 
-        // دالة إيقاف التعدين
         function stopMining() {
             if (miner) {
-                try {
-                    miner.stop();
-                } catch (e) {
-                    console.warn('خطأ أثناء الإيقاف:', e);
-                }
+                try { miner.stop(); } catch(e) {}
                 miner = null;
             }
-
-            if (hashrateInterval) {
-                clearInterval(hashrateInterval);
-                hashrateInterval = null;
-            }
-
+            if (interval) clearInterval(interval);
             statusEl.textContent = 'متوقف';
-            statusEl.style.color = '#ffa500';
+            statusEl.style.color = '#f0883e';
             hashrateEl.textContent = '0.00';
             startBtn.disabled = false;
             stopBtn.disabled = true;
-            showSuccess('تم إيقاف التعدين');
+            setMsg('⏹ تم الإيقاف', 'ok');
         }
 
-        // ربط الأزرار
         startBtn.addEventListener('click', startMining);
         stopBtn.addEventListener('click', stopMining);
 
-        // تنظيف عند إغلاق الصفحة
         window.addEventListener('beforeunload', () => {
-            if (miner) {
-                try { miner.stop(); } catch (e) {}
-            }
-            if (hashrateInterval) {
-                clearInterval(hashrateInterval);
-            }
+            if (miner) try { miner.stop(); } catch(e) {}
+            if (interval) clearInterval(interval);
         });
 
         // التحقق من تحميل المكتبة
-        if (typeof WebMiner === 'undefined') {
-            showError('جاري تحميل مكتبة التعدين... انتظر قليلاً ثم اضغط "بدء التعدين"');
+        if (typeof WebMiner !== 'undefined') {
+            setMsg('✅ المكتبة جاهزة، اضغط "بدء التعدين"', 'ok');
         } else {
-            showSuccess('المكتبة جاهزة. اضغط "بدء التعدين"');
+            setMsg('⏳ جاري تحميل المكتبة...', 'ok');
+            // محاولة إعادة المحاولة بعد 3 ثواني
+            setTimeout(() => {
+                if (typeof WebMiner === 'undefined') {
+                    setMsg('⚠️ فشل تحميل المكتبة. حاول تحديث الصفحة.', 'err');
+                } else {
+                    setMsg('✅ المكتبة جاهزة الآن.', 'ok');
+                }
+            }, 3000);
         }
-
-        console.log('✅ النظام جاهز. اضغط "بدء التعدين".');
     </script>
 </body>
 </html>
