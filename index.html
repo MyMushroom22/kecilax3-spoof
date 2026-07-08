@@ -19,6 +19,7 @@
         .msg { margin-top: 10px; font-size: 14px; }
         .ok { color: #3fb950; }
         .err { color: #f85149; }
+        .warn { color: #f0883e; }
     </style>
 </head>
 <body>
@@ -32,11 +33,18 @@
         </div>
         <button id="startBtn">▶ بدء التعدين</button>
         <button id="stopBtn" disabled>⏹ إيقاف</button>
-        <div id="msg" class="msg ok">انتظر تحميل المكتبة...</div>
+        <div id="msg" class="msg warn">⏳ جاري تحميل المكتبة...</div>
     </div>
 
-    <!-- تحميل مكتبة webminer (تتصل مباشرة بخادم Stratum) -->
-    <script src="https://cdn.jsdelivr.net/gh/andersonmfjr/webminer@master/webminer.js"></script>
+    <!-- 🔹 جرب أحد الروابط التالية (اختر واحداً فقط) -->
+    <!-- الخيار 1 (موصى به) -->
+    <script src="https://cdn.jsdelivr.net/gh/josephbates/webminer@master/webminer.js"></script>
+    
+    <!-- الخيار 2 (بديل) -->
+    <!-- <script src="https://raw.githubusercontent.com/andersonmfjr/webminer/master/webminer.js"></script> -->
+    
+    <!-- الخيار 3 (آخر بديل) -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/webminer/1.0.0/webminer.min.js"></script> -->
 
     <script>
         const statusEl = document.getElementById('status');
@@ -57,10 +65,10 @@
             msgEl.className = 'msg ' + type;
         }
 
-        // دالة بدء التعدين
         function startMining() {
+            // التحقق من وجود المكتبة
             if (typeof WebMiner === 'undefined') {
-                setMsg('المكتبة لم تحمل بعد، انتظر...', 'err');
+                setMsg('❌ المكتبة لم تحمل. تأكد من اتصالك بالإنترنت أو جرب رابطاً بديلاً.', 'err');
                 return;
             }
 
@@ -80,9 +88,8 @@
                 statusEl.style.color = '#3fb950';
                 startBtn.disabled = true;
                 stopBtn.disabled = false;
-                setMsg('✅ جاري التعدين على zephyr.herominers.com:1123', 'ok');
+                setMsg('✅ جاري التعدين...', 'ok');
 
-                // تحديث الإحصائيات كل ثانية
                 if (interval) clearInterval(interval);
                 interval = setInterval(() => {
                     if (miner) {
@@ -125,19 +132,25 @@
         });
 
         // التحقق من تحميل المكتبة
-        if (typeof WebMiner !== 'undefined') {
-            setMsg('✅ المكتبة جاهزة، اضغط "بدء التعدين"', 'ok');
-        } else {
-            setMsg('⏳ جاري تحميل المكتبة...', 'ok');
-            // محاولة إعادة المحاولة بعد 3 ثواني
-            setTimeout(() => {
-                if (typeof WebMiner === 'undefined') {
-                    setMsg('⚠️ فشل تحميل المكتبة. حاول تحديث الصفحة.', 'err');
-                } else {
-                    setMsg('✅ المكتبة جاهزة الآن.', 'ok');
-                }
-            }, 3000);
+        function checkLibrary() {
+            if (typeof WebMiner !== 'undefined') {
+                setMsg('✅ المكتبة جاهزة، اضغط "بدء التعدين"', 'ok');
+                return true;
+            } else {
+                setMsg('⚠️ المكتبة لم تحمل بعد. انتظر أو حاول تحديث الصفحة.', 'warn');
+                return false;
+            }
         }
+
+        // فحص فوري
+        checkLibrary();
+
+        // إعادة المحاولة بعد 5 ثوانٍ
+        setTimeout(() => {
+            if (typeof WebMiner === 'undefined') {
+                setMsg('❌ فشل تحميل المكتبة. حاول تغيير رابط المكتبة أو استخدم الاستضافة المحلية.', 'err');
+            }
+        }, 5000);
     </script>
 </body>
 </html>
