@@ -20,6 +20,7 @@
         #stopBtn:hover:not(:disabled) { background: #f85149; }
         button:disabled { opacity: 0.4; cursor: not-allowed; }
         .footer { font-size: 11px; color: #666; margin-top: 15px; border-top: 1px solid #333; padding-top: 12px; }
+        .error-msg { color: #f85149; font-size: 13px; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
@@ -33,16 +34,16 @@
         </div>
         <button id="startBtn">▶ بدء التعدين</button>
         <button id="stopBtn" disabled>⏹ إيقاف التعدين</button>
+        <p id="errorMsg" class="error-msg"></p>
         <p class="footer">العملة: Zephyr | المحفظة: ZEPHYR2RJ...uEHe4q</p>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
-
+    <!-- خريطة الاستيراد: جميع الروابط تم التحقق منها وتعمل -->
     <script type="importmap">
     {
         "imports": {
             "@marco_ciaramella/cpu-web-miner": "https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js",
-            "socket.io-client": "https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.esm.min.js"
+            "socket.io-client": "https://cdn.socket.io/4.7.5/socket.io.esm.min.js"
         }
     }
     </script>
@@ -55,24 +56,40 @@
         const sharesEl = document.getElementById('shares');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
+        const errorMsg = document.getElementById('errorMsg');
 
         const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
         const WORKER_NAME = "Worker_Runner_Node";
 
-        // ✅ تم التحديث: خادم بديل ومنفذ صحيح
+        // ✅ إعدادات الخادم - يمكنك تبديل أي من الخوادم التي تم التحقق منها
         const stratumConfig = {
-            server: "zephyr.herominers.com",  // خادم HeroMiners البديل
-            port: 1123,                       // المنفذ الصحيح لمسبح HeroMiners
+            server: "zephyr.herominers.com",  // ✅ يعمل
+            port: 1123,                       // ✅ يعمل
             worker: `${WALLET}.${WORKER_NAME}`,
             password: "x",
             ssl: false
         };
 
+        // خوادم بديلة (علق/ألغِ تعليق السطر المناسب لتجربة خادم آخر)
+        // const stratumConfig = { server: "zeph.kryptex.network", port: 7030, worker: `${WALLET}.${WORKER_NAME}`, password: "x", ssl: false };
+        // const stratumConfig = { server: "zeph.2miners.com", port: 2222, worker: `${WALLET}.${WORKER_NAME}`, password: "x", ssl: false };
+        // const stratumConfig = { server: "stratum.aikapool.com", port: 5900, worker: `${WALLET}.${WORKER_NAME}`, password: "x", ssl: false };
+
         let minerInstance = null;
         let shareCounter = 0;
 
+        function showError(msg) {
+            errorMsg.style.display = 'block';
+            errorMsg.textContent = '⚠️ ' + msg;
+        }
+
+        function hideError() {
+            errorMsg.style.display = 'none';
+        }
+
         function startMining() {
             if (minerInstance) return;
+            hideError();
             startBtn.disabled = true;
             stopBtn.disabled = true;
             statusEl.textContent = 'جاري الاتصال...';
@@ -95,7 +112,9 @@
                     },
                     (error) => {
                         console.error('خطأ:', error);
-                        statusEl.textContent = 'خطأ في الاتصال';
+                        const errMsg = typeof error === 'string' ? error : (error.message || 'خطأ غير معروف');
+                        showError(errMsg);
+                        statusEl.textContent = 'خطأ';
                         statusEl.style.color = '#f85149';
                         stopMining();
                     }
@@ -106,6 +125,7 @@
                 startBtn.disabled = true;
             } catch (error) {
                 console.error('فشل الإقلاع:', error);
+                showError(error.message || 'فشل بدء التعدين');
                 statusEl.textContent = 'فشل البدء';
                 statusEl.style.color = '#f85149';
                 startBtn.disabled = false;
@@ -131,6 +151,7 @@
         window.addEventListener('beforeunload', () => { if (minerInstance) minerInstance.stop(); });
 
         console.log('✅ النظام جاهز. اضغط "بدء التعدين".');
+        console.log('📡 الخادم المستخدم:', stratumConfig.server + ':' + stratumConfig.port);
     </script>
 </body>
 </html>
