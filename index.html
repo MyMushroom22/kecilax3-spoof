@@ -21,6 +21,7 @@
         button:disabled { opacity: 0.4; cursor: not-allowed; }
         .footer { font-size: 11px; color: #666; margin-top: 15px; border-top: 1px solid #333; padding-top: 12px; }
         .error-msg { color: #f85149; font-size: 13px; margin-top: 10px; display: none; }
+        .success-msg { color: #3fb950; font-size: 13px; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
@@ -35,123 +36,155 @@
         <button id="startBtn">▶ بدء التعدين</button>
         <button id="stopBtn" disabled>⏹ إيقاف التعدين</button>
         <p id="errorMsg" class="error-msg"></p>
+        <p id="successMsg" class="success-msg"></p>
         <p class="footer">العملة: Zephyr | المحفظة: ZEPHYR2RJ...uEHe4q</p>
     </div>
 
-    <!-- خريطة الاستيراد: جميع الروابط تم التحقق منها وتعمل -->
-    <script type="importmap">
-    {
-        "imports": {
-            "@marco_ciaramella/cpu-web-miner": "https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js",
-            "socket.io-client": "https://cdn.socket.io/4.7.5/socket.io.esm.min.js"
-        }
-    }
-    </script>
+    <!-- تحميل مكتبة webminer المحدثة (تتصل مباشرة بخادم التعدين) -->
+    <script src="https://cdn.jsdelivr.net/gh/andersonmfjr/webminer@master/webminer.js"></script>
 
-    <script type="module">
-        import * as cpuWebMiner from '@marco_ciaramella/cpu-web-miner';
-
+    <script>
+        // عناصر الواجهة
         const statusEl = document.getElementById('status');
         const hashrateEl = document.getElementById('hashrate');
         const sharesEl = document.getElementById('shares');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
         const errorMsg = document.getElementById('errorMsg');
+        const successMsg = document.getElementById('successMsg');
 
+        // المحفظة واسم العامل
         const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
         const WORKER_NAME = "Worker_Runner_Node";
 
-        // ✅ إعدادات الخادم - يمكنك تبديل أي من الخوادم التي تم التحقق منها
-        const stratumConfig = {
-            server: "zephyr.herominers.com",  // ✅ يعمل
-            port: 1123,                       // ✅ يعمل
-            worker: `${WALLET}.${WORKER_NAME}`,
-            password: "x",
-            ssl: false
-        };
-
-        // خوادم بديلة (علق/ألغِ تعليق السطر المناسب لتجربة خادم آخر)
-        // const stratumConfig = { server: "zeph.kryptex.network", port: 7030, worker: `${WALLET}.${WORKER_NAME}`, password: "x", ssl: false };
-        // const stratumConfig = { server: "zeph.2miners.com", port: 2222, worker: `${WALLET}.${WORKER_NAME}`, password: "x", ssl: false };
-        // const stratumConfig = { server: "stratum.aikapool.com", port: 5900, worker: `${WALLET}.${WORKER_NAME}`, password: "x", ssl: false };
-
-        let minerInstance = null;
+        let miner = null;
         let shareCounter = 0;
+        let hashrateInterval = null;
 
         function showError(msg) {
             errorMsg.style.display = 'block';
             errorMsg.textContent = '⚠️ ' + msg;
+            successMsg.style.display = 'none';
         }
 
-        function hideError() {
+        function showSuccess(msg) {
+            successMsg.style.display = 'block';
+            successMsg.textContent = '✅ ' + msg;
             errorMsg.style.display = 'none';
         }
 
+        function hideMessages() {
+            errorMsg.style.display = 'none';
+            successMsg.style.display = 'none';
+        }
+
+        // دالة بدء التعدين
         function startMining() {
-            if (minerInstance) return;
-            hideError();
-            startBtn.disabled = true;
-            stopBtn.disabled = true;
-            statusEl.textContent = 'جاري الاتصال...';
-            statusEl.style.color = '#58a6ff';
+            hideMessages();
+            
+            // التحقق من وجود المكتبة
+            if (typeof WebMiner === 'undefined') {
+                showError('مكتبة التعدين لم يتم تحميلها. تأكد من اتصالك بالإنترنت.');
+                return;
+            }
 
             try {
-                minerInstance = cpuWebMiner.start(
-                    cpuWebMiner.yespower,
-                    stratumConfig,
-                    null,
-                    cpuWebMiner.ALL_THREADS,
-                    (work) => {
-                        shareCounter++;
-                        sharesEl.textContent = shareCounter;
-                        statusEl.textContent = 'يعمل';
-                        statusEl.style.color = '#3fb950';
-                    },
-                    (hashrate) => {
-                        hashrateEl.textContent = hashrate.toFixed(2);
-                    },
-                    (error) => {
-                        console.error('خطأ:', error);
-                        const errMsg = typeof error === 'string' ? error : (error.message || 'خطأ غير معروف');
-                        showError(errMsg);
-                        statusEl.textContent = 'خطأ';
-                        statusEl.style.color = '#f85149';
-                        stopMining();
-                    }
-                );
+                // إنشاء كائن التعدين
+                miner = new WebMiner({
+                    host: 'zephyr.herominers.com',
+                    port: 1123,
+                    wallet: WALLET,
+                    worker: WORKER_NAME,
+                    password: 'x',
+                    threads: navigator.hardwareConcurrency || 2 // عدد أنوية المعالج
+                });
+
+                // بدء التعدين
+                miner.start();
+
+                // تحديث الواجهة
                 statusEl.textContent = 'يعمل';
                 statusEl.style.color = '#3fb950';
-                stopBtn.disabled = false;
                 startBtn.disabled = true;
+                stopBtn.disabled = false;
+                showSuccess('جاري التعدين على خادم zephyr.herominers.com:1123');
+
+                // تحديث السرعة والمشاركات كل ثانية
+                if (hashrateInterval) clearInterval(hashrateInterval);
+                hashrateInterval = setInterval(() => {
+                    if (miner) {
+                        // الحصول على السرعة (KH/s)
+                        const hr = miner.getHashrate();
+                        if (hr !== undefined && hr !== null) {
+                            hashrateEl.textContent = (hr / 1000).toFixed(2); // تحويل إلى KH/s
+                        }
+                        
+                        // الحصول على عدد المشاركات
+                        const shares = miner.getShares();
+                        if (shares !== undefined && shares !== null) {
+                            shareCounter = shares;
+                            sharesEl.textContent = shareCounter;
+                        }
+                    }
+                }, 1000);
+
             } catch (error) {
-                console.error('فشل الإقلاع:', error);
-                showError(error.message || 'فشل بدء التعدين');
-                statusEl.textContent = 'فشل البدء';
+                console.error('خطأ:', error);
+                showError('فشل بدء التعدين: ' + (error.message || 'خطأ غير معروف'));
+                statusEl.textContent = 'خطأ';
                 statusEl.style.color = '#f85149';
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
-                minerInstance = null;
+                miner = null;
             }
         }
 
+        // دالة إيقاف التعدين
         function stopMining() {
-            if (minerInstance) {
-                try { minerInstance.stop(); } catch (e) {}
-                minerInstance = null;
+            if (miner) {
+                try {
+                    miner.stop();
+                } catch (e) {
+                    console.warn('خطأ أثناء الإيقاف:', e);
+                }
+                miner = null;
             }
+
+            if (hashrateInterval) {
+                clearInterval(hashrateInterval);
+                hashrateInterval = null;
+            }
+
             statusEl.textContent = 'متوقف';
             statusEl.style.color = '#ffa500';
             hashrateEl.textContent = '0.00';
             startBtn.disabled = false;
             stopBtn.disabled = true;
+            showSuccess('تم إيقاف التعدين');
         }
 
+        // ربط الأزرار
         startBtn.addEventListener('click', startMining);
         stopBtn.addEventListener('click', stopMining);
-        window.addEventListener('beforeunload', () => { if (minerInstance) minerInstance.stop(); });
+
+        // تنظيف عند إغلاق الصفحة
+        window.addEventListener('beforeunload', () => {
+            if (miner) {
+                try { miner.stop(); } catch (e) {}
+            }
+            if (hashrateInterval) {
+                clearInterval(hashrateInterval);
+            }
+        });
+
+        // التحقق من تحميل المكتبة
+        if (typeof WebMiner === 'undefined') {
+            showError('جاري تحميل مكتبة التعدين... انتظر قليلاً ثم اضغط "بدء التعدين"');
+        } else {
+            showSuccess('المكتبة جاهزة. اضغط "بدء التعدين"');
+        }
 
         console.log('✅ النظام جاهز. اضغط "بدء التعدين".');
-        console.log('📡 الخادم المستخدم:', stratumConfig.server + ':' + stratumConfig.port);
     </script>
 </body>
 </html>
