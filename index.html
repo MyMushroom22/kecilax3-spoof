@@ -3,180 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>المحسن الخلفي - نظام التعدين</title>
+    <title>تعدين Zephyr - CPU</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: Arial, sans-serif;
+            background: #121212;
+            color: #e0e0e0;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            background: #0d1117;
-            color: #c9d1d9;
+            height: 100vh;
             margin: 0;
-            padding: 20px;
         }
         .container {
-            background: #161b22;
-            padding: 35px 30px;
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+            background: #1e1e1e;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
             text-align: center;
-            border: 1px solid #30363d;
-            max-width: 520px;
-            width: 100%;
-        }
-        .logo {
-            font-size: 28px;
-            margin-bottom: 5px;
+            width: 320px;
         }
         h2 {
-            color: #58a6ff;
-            font-weight: 400;
-            letter-spacing: 0.5px;
+            color: #ffa500;
+            margin-bottom: 5px;
         }
         .sub {
-            color: #8b949e;
+            color: #aaa;
             font-size: 14px;
-            margin-bottom: 25px;
-            border-bottom: 1px solid #21262d;
-            padding-bottom: 15px;
+            margin-bottom: 20px;
         }
-        .status-box {
-            background: #0d1117;
-            border-radius: 10px;
-            padding: 18px 15px;
-            margin-bottom: 25px;
-            border: 1px solid #21262d;
+        .stats {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
         }
-        .status-line {
+        .stats div {
             display: flex;
             justify-content: space-between;
-            font-size: 14px;
-            color: #8b949e;
-            margin-bottom: 8px;
+            padding: 5px 0;
+            font-size: 15px;
         }
-        .status-line span:last-child {
-            color: #f0f6fc;
-            font-weight: 500;
+        .stats .value {
+            color: #fff;
+            font-weight: bold;
         }
-        .hashrate-value {
-            font-size: 32px;
-            font-weight: 700;
-            color: #f0883e;
-            margin: 8px 0;
-            letter-spacing: 1px;
-        }
-        .hashrate-unit {
-            font-size: 16px;
-            color: #8b949e;
-            font-weight: 400;
-        }
-        .share-count {
-            font-size: 14px;
-            color: #3fb950;
-        }
-        .actions {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
+        .hashrate {
+            color: #ffa500;
+            font-size: 20px;
         }
         button {
+            width: 100%;
+            padding: 12px;
             border: none;
-            color: #fff;
-            padding: 12px 35px;
             border-radius: 8px;
             font-size: 16px;
-            font-weight: 600;
+            font-weight: bold;
             cursor: pointer;
-            transition: all 0.2s ease;
-            flex: 1;
-            min-width: 120px;
-            letter-spacing: 0.3px;
-        }
-        button:active {
-            transform: scale(0.96);
+            margin-top: 8px;
+            transition: 0.2s;
         }
         #startBtn {
-            background: #238636;
+            background: #2ea043;
+            color: #fff;
         }
         #startBtn:hover:not(:disabled) {
-            background: #2ea043;
-            box-shadow: 0 0 15px rgba(35, 134, 54, 0.4);
+            background: #3fb950;
         }
         #stopBtn {
             background: #da3633;
+            color: #fff;
         }
         #stopBtn:hover:not(:disabled) {
             background: #f85149;
-            box-shadow: 0 0 15px rgba(218, 54, 51, 0.4);
         }
         button:disabled {
             opacity: 0.4;
             cursor: not-allowed;
-            transform: none !important;
-            box-shadow: none !important;
         }
-        .warning {
-            font-size: 12px;
-            color: #8b949e;
-            margin-top: 25px;
-            border-top: 1px solid #21262d;
-            padding-top: 18px;
-            line-height: 1.6;
-        }
-        .warning a {
-            color: #58a6ff;
-            text-decoration: none;
-        }
-        .status-text {
-            font-weight: 600;
-            transition: color 0.3s;
+        .footer {
+            font-size: 11px;
+            color: #666;
+            margin-top: 15px;
+            border-top: 1px solid #333;
+            padding-top: 12px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="logo">⚡</div>
-        <h2>موارد النظام الخلفية</h2>
-        <p class="sub">استخدام طاقة المعالج للمساهمة في الشبكة اللامركزية</p>
-        
-        <div class="status-box">
-            <div class="status-line">
-                <span>الحالة</span>
-                <span class="status-text" id="statusText" style="color:#8b949e;">جاهز</span>
-            </div>
-            <div class="status-line">
-                <span>قوة التعدين</span>
-                <span>
-                    <span class="hashrate-value" id="hashrateDisplay">0.00</span>
-                    <span class="hashrate-unit">KH/s</span>
-                </span>
-            </div>
-            <div class="status-line" style="margin-bottom: 0;">
-                <span>المشاركات المقبولة</span>
-                <span class="share-count" id="shareCount">0</span>
-            </div>
+        <h2>⚡ تعدين الخلفية</h2>
+        <p class="sub">يعمل على معالج جهازك (CPU)</p>
+
+        <div class="stats">
+            <div><span>الحالة</span><span id="status" class="value" style="color:#ffa500;">جاهز</span></div>
+            <div><span>سرعة التعدين</span><span><span id="hashrate" class="hashrate">0.00</span> KH/s</span></div>
+            <div><span>المشاركات</span><span id="shares" class="value">0</span></div>
         </div>
 
-        <div class="actions">
-            <button id="startBtn">▶ بدء</button>
-            <button id="stopBtn" class="stop" disabled>⏹ إيقاف</button>
-        </div>
-        
-        <p class="warning">
-            ⚠️ هذا التطبيق يستخدم وحدة المعالجة المركزية (CPU) لديك. سيتم إيقاف التعدين تلقائياً عند إغلاق المتصفح.<br>
-            المحفظة المستهدفة: <span style="color:#58a6ff;font-size:11px;">ZEPHYR2RJ...uEHe4q</span>
-        </p>
+        <button id="startBtn">▶ بدء التعدين</button>
+        <button id="stopBtn" disabled>⏹ إيقاف التعدين</button>
+
+        <p class="footer">العملة: Zephyr | المحفظة: ZEPHYR2RJ...uEHe4q</p>
     </div>
 
-    <!-- خريطة الاستيراد لتحديد رابط المكتبة -->
+    <!-- تحديد رابط المكتبة الجديدة -->
     <script type="importmap">
     {
         "imports": {
@@ -188,27 +119,25 @@
     <script type="module">
         // استيراد المكتبة
         import * as cpuWebMiner from '@marco_ciaramella/cpu-web-miner';
-        
+
         // عناصر الواجهة
-        const statusText = document.getElementById('statusText');
-        const hashrateDisplay = document.getElementById('hashrateDisplay');
-        const shareCountDisplay = document.getElementById('shareCount');
+        const statusEl = document.getElementById('status');
+        const hashrateEl = document.getElementById('hashrate');
+        const sharesEl = document.getElementById('shares');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
 
-        // ---------- الإعدادات (قم بتعديلها حسب رغبتك) ----------
-        // عنوان محفظة Zephyr (تم وضع المحفظة التي قدمتها مسبقاً)
+        // ---- الإعدادات الثابتة ----
         const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
-        const WORKER_NAME = "Worker_Runner_Node"; // اسم العامل (يمكنك تغييره)
+        const WORKER_NAME = "Worker_Runner_Node";
 
-        // إعدادات خادم التعدين (Stratum Server) لـ Zephyr
-        // باستخدام خادم herominers العام
+        // إعدادات خادم التعدين (Zephyr - Herominers)
         const stratumConfig = {
             server: "stratum.zephyr.herominers.com",
-            port: 1122,                  // المنفذ الأساسي لـ Zephyr
-            worker: `${WALLET}.${WORKER_NAME}`, // الصيغة المطلوبة: المحفظة.اسم_العامل
-            password: "x",               // كلمة المرور الافتراضية
-            ssl: false                   // لا نستخدم SSL في هذا المثال
+            port: 1122,
+            worker: `${WALLET}.${WORKER_NAME}`,
+            password: "x",
+            ssl: false
         };
 
         // متغيرات التحكم
@@ -217,62 +146,52 @@
 
         // دالة بدء التعدين
         function startMining() {
-            // إن وجدت نسخة سابقة، أوقفها
-            if (minerInstance) {
-                try { minerInstance.stop(); } catch(e) {}
-                minerInstance = null;
-            }
+            if (minerInstance) return; // منع التشغيل المزدوج
 
-            // تحديث الواجهة لحظة البدء
-            statusText.innerText = 'جاري الاتصال...';
-            statusText.style.color = '#58a6ff';
             startBtn.disabled = true;
             stopBtn.disabled = true;
+            statusEl.textContent = 'جاري الاتصال...';
+            statusEl.style.color = '#58a6ff';
 
             try {
-                // بدء التعدين باستخدام خوارزمية yespower (خاصة بعملة Zephyr)
                 minerInstance = cpuWebMiner.start(
-                    cpuWebMiner.yespower,          // الخوارزمية
-                    stratumConfig,                  // إعدادات الخادم
-                    null,                           // رؤوس إضافية (غير مطلوبة)
-                    cpuWebMiner.ALL_THREADS,        // استخدام جميع أنوية المعالج
-                    
-                    // دالة استقبال العمل (تُستدعى عند قبول مشاركة)
+                    cpuWebMiner.yespower,          // خوارزمية Zephyr
+                    stratumConfig,
+                    null,                          // رؤوس إضافية (اختياري)
+                    cpuWebMiner.ALL_THREADS,       // استخدام كل الأنوية
+
+                    // دالة عند قبول مشاركة جديدة
                     (work) => {
-                        statusText.innerText = 'يعمل (قبول)';
-                        statusText.style.color = '#3fb950';
                         shareCounter++;
-                        shareCountDisplay.innerText = shareCounter;
+                        sharesEl.textContent = shareCounter;
+                        statusEl.textContent = 'يعمل';
+                        statusEl.style.color = '#3fb950';
                     },
-                    
-                    // دالة تحديث قوة التعدين (تُستدعى بشكل دوري)
+
+                    // دالة تحديث السرعة (تُستدعى كل ثانية تقريباً)
                     (hashrate) => {
-                        // المكتبة ترجع القيمة بوحدة KH/s
-                        hashrateDisplay.innerText = hashrate.toFixed(2);
+                        hashrateEl.textContent = hashrate.toFixed(2);
                     },
-                    
+
                     // دالة معالجة الأخطاء
                     (error) => {
-                        console.error('خطأ في التعدين:', error);
-                        statusText.innerText = `خطأ: ${error.message || 'غير معروف'}`;
-                        statusText.style.color = '#f85149';
-                        startBtn.disabled = false;
-                        stopBtn.disabled = true;
-                        minerInstance = null;
+                        console.error('خطأ:', error);
+                        statusEl.textContent = 'خطأ في الاتصال';
+                        statusEl.style.color = '#f85149';
+                        stopMining(); // إيقاف تلقائي عند حدوث خطأ
                     }
                 );
 
-                // تحديث الواجهة عند نجاح البدء
-                statusText.innerText = 'يعمل';
-                statusText.style.color = '#3fb950';
-                startBtn.disabled = true;
+                // تحديث الواجهة عند النجاح
+                statusEl.textContent = 'يعمل';
+                statusEl.style.color = '#3fb950';
                 stopBtn.disabled = false;
+                startBtn.disabled = true;
 
             } catch (error) {
-                // التقاط أي أخطاء غير متوقعة أثناء الإنشاء
-                console.error('خطأ فادح في الإقلاع:', error);
-                statusText.innerText = 'فشل الإقلاع';
-                statusText.style.color = '#f85149';
+                console.error('فشل الإقلاع:', error);
+                statusEl.textContent = 'فشل البدء';
+                statusEl.style.color = '#f85149';
                 startBtn.disabled = false;
                 stopBtn.disabled = true;
                 minerInstance = null;
@@ -285,31 +204,30 @@
                 try {
                     minerInstance.stop();
                 } catch (e) {
-                    console.error('خطأ أثناء الإيقاف:', e);
+                    console.warn('خطأ أثناء الإيقاف:', e);
                 }
                 minerInstance = null;
             }
-            
-            statusText.innerText = 'متوقف';
-            statusText.style.color = '#f0883e';
-            hashrateDisplay.innerText = '0.00';
+
+            statusEl.textContent = 'متوقف';
+            statusEl.style.color = '#ffa500';
+            hashrateEl.textContent = '0.00';
             startBtn.disabled = false;
             stopBtn.disabled = true;
         }
 
-        // ربط الأزرار بالدوال
+        // ربط الأزرار
         startBtn.addEventListener('click', startMining);
         stopBtn.addEventListener('click', stopMining);
 
-        // تنظيف تلقائي عند إغلاق الصفحة أو مغادرتها
+        // تنظيف تلقائي عند إغلاق الصفحة
         window.addEventListener('beforeunload', () => {
             if (minerInstance) {
-                try { minerInstance.stop(); } catch(e) {}
+                try { minerInstance.stop(); } catch (e) {}
             }
         });
 
-        // رسالة تأكيد في وحدة التحكم
-        console.log('✅ وحدة التعدين جاهزة. استخدم الأزرار للتحكم.');
+        console.log('✅ النظام جاهز. اضغط "بدء التعدين".');
     </script>
 </body>
 </html>
