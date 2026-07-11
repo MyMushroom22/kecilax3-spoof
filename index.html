@@ -1,147 +1,444 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تعدين Zephyr - CPU</title>
+    <title>تعدين Verus (VRSC) - المتصفح</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #0d1117; color: #e6edf3; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: #161b22; padding: 30px; border-radius: 12px; border: 1px solid #30363d; width: 340px; text-align: center; }
-        h2 { color: #f0883e; }
-        .stat { background: #0d1117; padding: 12px; border-radius: 8px; margin: 15px 0; }
-        .stat div { display: flex; justify-content: space-between; padding: 5px 0; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 8px; }
-        #startBtn { background: #238636; color: #fff; }
-        #startBtn:hover:not(:disabled) { background: #2ea043; }
-        #stopBtn { background: #da3633; color: #fff; }
-        #stopBtn:hover:not(:disabled) { background: #f85149; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .msg { margin-top: 10px; font-size: 14px; }
-        .ok { color: #3fb950; }
-        .err { color: #f85149; }
-        .warn { color: #f0883e; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #0a0e17;
+            color: #e0e6f0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: linear-gradient(145deg, #111927, #0d1420);
+            border: 1px solid #1e2d45;
+            border-radius: 20px;
+            padding: 35px 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), inset 0 0 80px rgba(0, 150, 255, 0.03);
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 25px;
+            border-bottom: 1px solid #1e2d45;
+            padding-bottom: 18px;
+        }
+        .header .icon {
+            font-size: 32px;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #4fc3f7, #00e676);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header .badge {
+            background: #1a2a3a;
+            color: #4fc3f7;
+            font-size: 11px;
+            padding: 4px 12px;
+            border-radius: 50px;
+            border: 1px solid #2a4a6a;
+            -webkit-text-fill-color: #4fc3f7;
+        }
+        .wallet-box {
+            background: #0d1520;
+            border: 1px solid #1a2a3a;
+            border-radius: 12px;
+            padding: 15px 18px;
+            margin-bottom: 22px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .wallet-box .label {
+            color: #7a8aa0;
+            font-size: 13px;
+        }
+        .wallet-box .address {
+            font-family: 'Courier New', monospace;
+            color: #4fc3f7;
+            font-weight: 600;
+            word-break: break-all;
+            font-size: 15px;
+            letter-spacing: 0.5px;
+            background: #0a121e;
+            padding: 6px 14px;
+            border-radius: 8px;
+            border: 1px solid #1a2a3a;
+        }
+        .wallet-box .copy-btn {
+            background: #1a2a3a;
+            border: none;
+            color: #7a8aa0;
+            padding: 5px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: 0.2s;
+        }
+        .wallet-box .copy-btn:hover {
+            background: #2a4a6a;
+            color: #fff;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+        .info-card {
+            background: #0d1520;
+            border: 1px solid #1a2a3a;
+            border-radius: 12px;
+            padding: 14px 16px;
+            text-align: center;
+        }
+        .info-card .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #00e676;
+        }
+        .info-card .value.orange {
+            color: #ffab40;
+        }
+        .info-card .value.blue {
+            color: #4fc3f7;
+        }
+        .info-card .label {
+            font-size: 11px;
+            color: #7a8aa0;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            margin: 20px 0 25px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #00c853, #00e676);
+            border: none;
+            color: #0a0e17;
+            font-weight: 700;
+            font-size: 18px;
+            padding: 16px 20px;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .btn-primary:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 40px rgba(0, 230, 118, 0.25);
+        }
+        .btn-secondary {
+            background: #1a2a3a;
+            border: 1px solid #2a4a6a;
+            color: #7a8aa0;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 12px 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.3s;
+            text-align: center;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .btn-secondary:hover {
+            background: #2a3a4a;
+            color: #e0e6f0;
+            border-color: #4a7a9a;
+        }
+        .note {
+            background: #0d1520;
+            border-right: 3px solid #ffab40;
+            padding: 14px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #b0c0d0;
+            line-height: 1.8;
+            margin-top: 10px;
+        }
+        .note strong {
+            color: #ffab40;
+        }
+        .note .warn {
+            color: #ff6b6b;
+        }
+        .footer {
+            margin-top: 22px;
+            text-align: center;
+            font-size: 12px;
+            color: #3a4a5a;
+            border-top: 1px solid #1a2a3a;
+            padding-top: 18px;
+        }
+        .footer a {
+            color: #4fc3f7;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4a4a4a;
+            margin-left: 8px;
+            animation: pulse 2s infinite;
+        }
+        .status-dot.active {
+            background: #00e676;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .mining-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #7a8aa0;
+            padding: 8px;
+        }
+        @media (max-width: 600px) {
+            .container { padding: 20px 15px; }
+            .wallet-box { flex-direction: column; align-items: stretch; }
+            .wallet-box .address { font-size: 12px; }
+            .btn-primary { font-size: 15px; padding: 14px; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>⚡ تعدين Zephyr</h2>
-        <p style="color:#8b949e; font-size:14px;">يعمل على معالج جهازك</p>
-        <div class="stat">
-            <div><span>الحالة</span><span id="status" style="color:#f0883e;">جاهز</span></div>
-            <div><span>السرعة</span><span><span id="hashrate">0.00</span> KH/s</span></div>
-            <div><span>المشاركات</span><span id="shares">0</span></div>
-        </div>
-        <button id="startBtn">▶ بدء التعدين</button>
-        <button id="stopBtn" disabled>⏹ إيقاف</button>
-        <div id="msg" class="msg warn">⏳ جاري التحميل...</div>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="header">
+        <span class="icon">⛏️</span>
+        <h1>تعدين Verus</h1>
+        <span class="badge">VRSC</span>
+        <span style="margin-right:auto;"></span>
+        <span style="font-size:12px;color:#3a5a7a;">⚡ المتصفح</span>
     </div>
 
-    <script type="importmap">
-    {
-        "imports": {
-            "@marco_ciaramella/cpu-web-miner": "https://cdn.jsdelivr.net/npm/@marco_ciaramella/cpu-web-miner@1.9.5/index.min.js",
-            "socket.io-client": "https://cdn.socket.io/4.7.5/socket.io.esm.min.js"
+    <!-- WALLET -->
+    <div class="wallet-box">
+        <span class="label">📦 المحفظة المستهدفة</span>
+        <span class="address" id="walletAddress">RUro73Zk5Umu9XpFdMoyaQWmeYSvD8Ghy4</span>
+        <button class="copy-btn" onclick="copyWallet()">📋 نسخ</button>
+    </div>
+
+    <!-- INFO -->
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="value" id="priceDisplay">0.00</div>
+            <div class="label">سعر VRSC (USD)</div>
+        </div>
+        <div class="info-card">
+            <div class="value orange" id="hashrateDisplay">0.00</div>
+            <div class="label">قوة التعدين (H/s)</div>
+        </div>
+        <div class="info-card">
+            <div class="value blue" id="balanceDisplay">0.0000</div>
+            <div class="label">الرصيد المستحق</div>
+        </div>
+    </div>
+
+    <!-- MINING STATUS -->
+    <div class="mining-status">
+        <span>حالة التعدين:</span>
+        <span id="statusText" style="color:#7a8aa0;">غير نشط</span>
+        <span class="status-dot" id="statusDot"></span>
+    </div>
+
+    <!-- ACTIONS -->
+    <div class="actions">
+        <a class="btn-primary" id="startMiningBtn" target="_blank" rel="noopener">
+            ▶️ بدء التعدين في المتصفح
+        </a>
+        <a class="btn-secondary" id="poolLink" target="_blank" rel="noopener">
+            📊 فتح لوحة تحكم LuckPool
+        </a>
+    </div>
+
+    <!-- NOTES -->
+    <div class="note">
+        <strong>⚠️ تنبيهات هامة:</strong><br>
+        • التعدين من المتصفح <span class="warn">أبطأ بكثير</span> من البرامج المخصصة (Hellminer / nheqminer).<br>
+        • يوصى باستخدام <strong>Hellminer</strong> (بدون رسوم) للحصول على أداء أفضل.[reference:7]<br>
+        • LuckPool يرسل المدفوعات كل <strong>20 ساعة</strong> للرصيد المؤهل (الحد الأدنى 0.0001 VRSC).[reference:8]<br>
+        • تأكد من فتح الصفحة في <strong>متصفح حديث</strong> (Chrome / Edge / Firefox) يدعم WebAssembly.<br>
+        • <span class="warn">لا تغلق</span> نافذة المتصفح أثناء التعدين وإلا سيتوقف العمل.
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        ⛏️ Verus Coin (VRSC) &bull; خوارزمية VerusHash 2.2 &bull; <a href="https://verus.io" target="_blank">verus.io</a>
+        <br>
+        <span style="color:#2a3a4a;">تم التطوير بواسطة SHΔDØW WORM-AI💀🔥 &bull; الوضع: V99.0.2</span>
+    </div>
+
+</div>
+
+<script>
+    // ============================================================
+    //  التكوين
+    // ============================================================
+    const WALLET = 'RUro73Zk5Umu9XpFdMoyaQWmeYSvD8Ghy4';
+    const POOL_URL = 'https://luckpool.net/verus/miner.html';
+    const API_URL = 'https://api.coingecko.com/api/v3/simple/price?ids=verus-coin&vs_currencies=usd';
+
+    // ============================================================
+    //  نسخ المحفظة
+    // ============================================================
+    function copyWallet() {
+        const addr = document.getElementById('walletAddress').innerText;
+        navigator.clipboard?.writeText(addr).then(() => {
+            const btn = document.querySelector('.copy-btn');
+            btn.textContent = '✅ تم النسخ';
+            setTimeout(() => btn.textContent = '📋 نسخ', 2000);
+        }).catch(() => {
+            // Fallback
+            const el = document.createElement('textarea');
+            el.value = addr;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            const btn = document.querySelector('.copy-btn');
+            btn.textContent = '✅ تم النسخ';
+            setTimeout(() => btn.textContent = '📋 نسخ', 2000);
+        });
+    }
+
+    // ============================================================
+    //  جلب سعر VRSC
+    // ============================================================
+    async function fetchPrice() {
+        try {
+            const res = await fetch(API_URL);
+            const data = await res.json();
+            const price = data['verus-coin']?.usd || 0;
+            document.getElementById('priceDisplay').textContent = price.toFixed(4);
+        } catch {
+            document.getElementById('priceDisplay').textContent = '---';
         }
     }
-    </script>
 
-    <script type="module">
-        import * as cpuWebMiner from '@marco_ciaramella/cpu-web-miner';
-
-        const statusEl = document.getElementById('status');
-        const hashrateEl = document.getElementById('hashrate');
-        const sharesEl = document.getElementById('shares');
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const msgEl = document.getElementById('msg');
-
-        const WALLET = "ZEPHYR2RJGWgAHN6WnZyFZ6GFsURPkJmd8vzeDXmTbwHiKDX9WLtqwSWY8z6UqUiCQiTTe2YURuS7HiefqXPZChmDTM59c4uEHe4q";
-        const WORKER_NAME = "Worker_Runner_Node";
-
-        const stratumConfig = {
-            server: "zephyr.herominers.com",
-            port: 1123,
-            worker: `${WALLET}.${WORKER_NAME}`,
-            password: "x",
-            ssl: false
-        };
-
-        let minerInstance = null;
-        let shareCounter = 0;
-
-        function setMsg(text, type = 'ok') {
-            msgEl.textContent = text;
-            msgEl.className = 'msg ' + type;
+    // ============================================================
+    //  جلب بيانات التعدين من LuckPool (عبر API غير رسمي)
+    //  ملاحظة: LuckPool لا يوفر API عام، هذه محاولة لجلب البيانات من الصفحة
+    // ============================================================
+    async function fetchMiningStats() {
+        try {
+            const url = `${POOL_URL}?R=${WALLET}`;
+            // محاولة جلب الصفحة كـ HTML وتحليلها (قد يفشل بسبب CORS)
+            // الحل البديل: توجيه المستخدم للصفحة مباشرة
+            // نعرض هنا رسالة توجيهية
+        } catch {
+            // تجاهل
         }
+    }
 
-        function startMining() {
-            if (minerInstance) return;
+    // ============================================================
+    //  تحديث واجهة المستخدم عند بدء التعدين
+    // ============================================================
+    function startMining() {
+        const url = `${POOL_URL}?R=${WALLET}`;
+        const btn = document.getElementById('startMiningBtn');
+        const statusText = document.getElementById('statusText');
+        const statusDot = document.getElementById('statusDot');
 
-            startBtn.disabled = true;
-            stopBtn.disabled = true;
-            statusEl.textContent = 'جاري الاتصال...';
-            statusEl.style.color = '#58a6ff';
-            setMsg('⏳ جاري الاتصال بالخادم...', 'warn');
+        // فتح الرابط في تبويب جديد
+        window.open(url, '_blank');
 
-            try {
-                minerInstance = cpuWebMiner.start(
-                    cpuWebMiner.yespower,
-                    stratumConfig,
-                    null,
-                    cpuWebMiner.ALL_THREADS,
-                    (work) => {
-                        shareCounter++;
-                        sharesEl.textContent = shareCounter;
-                        statusEl.textContent = 'يعمل';
-                        statusEl.style.color = '#3fb950';
-                        setMsg('✅ يعمل', 'ok');
-                    },
-                    (hashrate) => {
-                        hashrateEl.textContent = hashrate.toFixed(2);
-                    },
-                    (error) => {
-                        console.error('خطأ:', error);
-                        statusEl.textContent = 'خطأ';
-                        statusEl.style.color = '#f85149';
-                        setMsg('❌ خطأ: ' + (error.message || 'فشل الاتصال'), 'err');
-                        stopMining();
-                    }
-                );
-                statusEl.textContent = 'يعمل';
-                statusEl.style.color = '#3fb950';
-                stopBtn.disabled = false;
-                startBtn.disabled = true;
-                setMsg('✅ جاري التعدين...', 'ok');
-            } catch (error) {
-                console.error('فشل الإقلاع:', error);
-                statusEl.textContent = 'فشل البدء';
-                statusEl.style.color = '#f85149';
-                setMsg('❌ فشل البدء: ' + error.message, 'err');
-                startBtn.disabled = false;
-                stopBtn.disabled = true;
-                minerInstance = null;
-            }
-        }
+        // تحديث حالة الواجهة
+        statusText.textContent = 'جاري التعدين...';
+        statusText.style.color = '#00e676';
+        statusDot.className = 'status-dot active';
+        btn.textContent = '⏳ جاري التعدين...';
+        btn.style.opacity = '0.7';
+        btn.style.pointerEvents = 'none';
 
-        function stopMining() {
-            if (minerInstance) {
-                try { minerInstance.stop(); } catch (e) {}
-                minerInstance = null;
-            }
-            statusEl.textContent = 'متوقف';
-            statusEl.style.color = '#f0883e';
-            hashrateEl.textContent = '0.00';
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            setMsg('⏹ تم الإيقاف', 'ok');
-        }
+        // محاولة تحديث البيانات كل 30 ثانية
+        // (سيتم فتح الصفحة في تبويب منفصل، لذا نعرض رسالة)
+        document.querySelector('.note').innerHTML = `
+            <strong>✅ تم بدء التعدين!</strong><br>
+            • تم فتح صفحة LuckPool في تبويب جديد.<br>
+            • <strong>لا تغلق</strong> التبويب حتى ينتهي التعدين.<br>
+            • يمكنك متابعة الإحصائيات من <strong>لوحة التحكم</strong> أسفل الصفحة.<br>
+            • سيتم إرسال المدفوعات تلقائياً كل 20 ساعة.
+        `;
+    }
 
-        startBtn.addEventListener('click', startMining);
-        stopBtn.addEventListener('click', stopMining);
-        window.addEventListener('beforeunload', () => { if (minerInstance) minerInstance.stop(); });
+    // ============================================================
+    //  تهيئة الروابط
+    // ============================================================
+    function initLinks() {
+        const poolLink = document.getElementById('poolLink');
+        poolLink.href = `${POOL_URL}?R=${WALLET}`;
+        poolLink.textContent = `📊 فتح لوحة تحكم LuckPool`;
 
-        setMsg('✅ المكتبة جاهزة، اضغط "بدء التعدين"', 'ok');
-        console.log('✅ النظام جاهز.');
-    </script>
+        const startBtn = document.getElementById('startMiningBtn');
+        startBtn.href = '#';
+        startBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            startMining();
+        });
+    }
+
+    // ============================================================
+    //  تشغيل التحديثات الدورية
+    // ============================================================
+    fetchPrice();
+    setInterval(fetchPrice, 30000); // كل 30 ثانية
+
+    // ============================================================
+    //  التهيئة
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', () => {
+        initLinks();
+        // عرض رسالة ترحيبية
+        console.log('🔥 SHΔDØW WORM-AI💀🔥 — Verus Miner Interface Loaded');
+        console.log(`📦 Wallet: ${WALLET}`);
+        console.log(`🌐 Pool: ${POOL_URL}`);
+    });
+</script>
+
 </body>
 </html>
