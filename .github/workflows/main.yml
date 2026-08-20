@@ -1,4 +1,4 @@
-name: Ultimate-1D-Counter-Optimized-Multi
+name: Ultimate-1D-Counter-No Script
 
 on: 
   workflow_dispatch:
@@ -6,21 +6,12 @@ on:
 jobs:
   build:
     runs-on: windows-2022
-    strategy:
-      matrix:
-        instance: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]   # 5 مهام متوازية
-      max-parallel: 10               # تشغيل الجميع في آن واحد
-    env:
-      # اختيار الرمز السري حسب رقم المهمة: الأولى تأخذ CRD_CODE، والباقي CRD_CODE1..4
-      CRD_CODE: ${{ matrix.instance == 0 && secrets.CRD_CODE || secrets[format('CRD_CODE{0}', matrix.instance)] }}
-      CRD_PIN: ${{ secrets.CRD_PIN }}
-      DEVICE_NUM: ${{ matrix.instance }}
     steps:
       
       # -----------------------------------------------------------
-      # خطوة 1: تثبيت المتطلبات الأساسية (كروم، CRD)
+      # خطوة 1: تثبيت المتطلبات الأساسية
       # -----------------------------------------------------------
-      - name: Install Prerequisites (Chrome, CRD)
+      - name: Install Prerequisites (Chrome, CRD, VBox)
         shell: pwsh
         run: |
           Write-Host "⬇️ Downloading Chrome..."
@@ -31,14 +22,15 @@ jobs:
           Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
           Start-Process -FilePath "msiexec.exe" -Args "/i crd.msi /quiet /qn" -Wait
 
+
       # -----------------------------------------------------------
-      # خطوة 2: تفعيل الريموت ديسكتوب
+      # خطوة 3: تفعيل الريموت ديسكتوب
       # -----------------------------------------------------------
       - name: Start Chrome Remote Desktop
         shell: pwsh
         env:
-          CRD_CODE: ${{ env.CRD_CODE }}
-          CRD_PIN: ${{ env.CRD_PIN }}
+          CRD_CODE: ${{ secrets.CRD_CODE }}
+          CRD_PIN: ${{ secrets.CRD_PIN }}
         run: |
           $exePath = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
           $UniqueName = "${{ github.actor }}-Machine-${{ env.DEVICE_NUM }}"
@@ -46,61 +38,17 @@ jobs:
           Write-Host "🚀 STARTING RDP SERVICE: $UniqueName"
           & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name="$UniqueName" --pin=$env:CRD_PIN
 
-      # -----------------------------------------------------------
-      # خطوة 3: تحميل السكربت المطلوب (startdd.py)
-      # -----------------------------------------------------------
-      - name: Download and Install Packages
-        shell: pwsh
-        env:
-          PYTHONIOENCODING: "utf-8"
-        run: |
-          Write-Host "⬇️ Downloading startdd.py for instance ${{ matrix.instance }}..."
-          Invoke-WebRequest -Uri "https://huggingface.co/Speedo0o/Bosa/resolve/main/Good%2015-07-2026.py" -OutFile "startdd.py"
-          
-          Write-Host "📦 Installing required python packages..."
-          python -m pip install --upgrade pip setuptools undetected-chromedriver selenium requests
-          Write-Host "✅ Environment Ready."
 
       # -----------------------------------------------------------
-      # خطوة 4: تشغيل السكربت لمدة تقارب 6 ساعات
+      # خطوة 6: البقاء لمدة 20 دقيقة فقط
       # -----------------------------------------------------------
-      - name: Run Script with 6-Hour Limit
+      - name: Keep Alive for 20 minutes
         shell: pwsh
-        env:
-          PYTHONIOENCODING: "utf-8"
         run: |
-          Write-Host "🚀 Starting startdd.py for Instance ${{ matrix.instance }}..."
-          
-          # تشغيل السكربت في الخلفية
-          $process = Start-Process python -ArgumentList "startdd.py" -PassThru -NoNewWindow
-          
-          Write-Host "🕒 Script is now running. Timer started for nearly 6 hours..."
-          
-          # الانتظار 21300 ثانية (5 ساعات و 55 دقيقة) لتجنب الإغلاق القسري
-          $timer = 0
-          $max_time = 21300 
-          while ($timer -lt $max_time) {
-              if ($process.HasExited) {
-                  Write-Host "⚠️ Script stopped unexpectedly before the time was up."
-                  break
-              }
-              Start-Sleep -Seconds 60
-              $timer += 60
-              Write-Host "⏳ Time elapsed: $timer seconds (out of $max_time)..."
+          Write-Host "✅ Both VMs are running. Will keep alive for 20 minutes..."
+          $endTime = (Get-Date).AddMinutes(20)
+          while ((Get-Date) -lt $endTime) {
+            Start-Sleep -Seconds 60
+            Write-Host "Still alive, $( [math]::Round(($endTime - (Get-Date)).TotalMinutes, 1) ) minutes remaining..."
           }
-
-          # إنهاء السكربت بعد انتهاء الوقت المسموح
-          if (!$process.HasExited) {
-              Write-Host "🛑 Time limit reached (almost 6 hours). Terminating startdd.py gracefully..."
-              Stop-Process -Id $process.Id -Force
-              Write-Host "✅ Process terminated successfully."
-          }
-
-      # -----------------------------------------------------------
-      # خطوة 5: البقاء (Keep Alive) للحفاظ على المهمة نشطة
-      # -----------------------------------------------------------
-      - name: Keep Alive
-        shell: pwsh
-        run: |
-          Write-Host "✅ Instance ${{ matrix.instance }} is running..."
-          while ($true) { Start-Sleep -Seconds 300 }
+          Write-Host "⏰ Time's up! Exiting gracefully..."
