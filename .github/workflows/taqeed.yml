@@ -8,26 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      # -----------------------------------------------------------
-      # خطوة 1: تثبيت وتفعيل Cloudflare WARP (إصلاح الشروط تلقائياً)
-      # -----------------------------------------------------------
-      - name: Install & Connect Cloudflare WARP
-        run: |
-          echo "🌐 Installing Cloudflare WARP..."
-          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          
-          sudo apt-get update
-          sudo apt-get install -y cloudflare-warp
 
-          echo "🚀 Registering & Connecting WARP..."
-          # إضافة --accept-tos وتخطي الشروط تفاعلياً
-          warp-cli --accept-tos registration new || warp-cli registration new --accept-tos
-          warp-cli --accept-tos mode warp
-          warp-cli --accept-tos connect
-          
-          sleep 3
-          warp-cli status
 
       # -----------------------------------------------------------
       # خطوة 2: تثبيت Chrome و CRD وأداة التقييد الصارم cpulimit
