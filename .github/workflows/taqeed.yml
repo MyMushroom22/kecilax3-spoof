@@ -1,99 +1,83 @@
-name: Ultimate-1D-Counter-No Script
+name: Ultimate-1D-Counter-Linux
 
 on: 
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: ubuntu-latest
     steps:
 
       # -----------------------------------------------------------
-      # خطوة 0: حبس بيئة التشغيل بالكامل تحت حاجز 17% صارم بدون تذبذب
+      # خطوة 1: تثبيت وتفعيل Cloudflare WARP (الاتصال التلقائي)
       # -----------------------------------------------------------
-      - name: Global Environment Lock (17% Hard Cap)
-        shell: pwsh
+      - name: Install & Connect Cloudflare WARP
         run: |
-          Write-Host "🔒 Locking entire step environment to 17% CPU Hard Cap..."
-
-          $Source = @"
-          using System;
-          using System.Diagnostics;
-          using System.Runtime.InteropServices;
-
-          public class GlobalCpuLock {
-              [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
-              public static extern IntPtr CreateJobObject(IntPtr lpJobAttributes, string lpName);
-
-              [DllImport("kernel32.dll")]
-              public static extern bool SetInformationJobObject(IntPtr hJob, int JobObjectInfoClass, IntPtr lpJobObjectInfo, uint cbJobObjectInfoLength);
-
-              [DllImport("kernel32.dll")]
-              public static extern bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
-
-              [StructLayout(LayoutKind.Sequential)]
-              public struct JOBOBJECT_CPU_RATE_CONTROL_INFORMATION {
-                  public uint ControlFlags;
-                  public uint CpuRate;
-              }
-
-              public static void LockCurrentTree(uint percent) {
-                  // 1. إنشاء حاجز صارم 17%
-                  IntPtr hJob = CreateJobObject(IntPtr.Zero, "GlobalRunnerHardCap17");
-                  
-                  JOBOBJECT_CPU_RATE_CONTROL_INFORMATION info = new JOBOBJECT_CPU_RATE_CONTROL_INFORMATION();
-                  // 0x1 = ENABLE, 0x4 = HARD_CAP (يمنع أي تجاوز نهائياً)
-                  info.ControlFlags = 0x1 | 0x4; 
-                  info.CpuRate = percent * 100; // 1700 = 17.00%
-
-                  int length = Marshal.SizeOf(info);
-                  IntPtr pInfo = Marshal.AllocHGlobal(length);
-                  Marshal.StructureToPtr(info, pInfo, false);
-
-                  SetInformationJobObject(hJob, 8, pInfo, (uint)length);
-                  Marshal.FreeHGlobal(pInfo);
-
-                  // 2. إدخال العملية الحالية (PowerShell) وأبنائها داخل الحبس
-                  Process currentProcess = Process.GetCurrentProcess();
-                  AssignProcessToJobObject(hJob, currentProcess.Handle);
-              }
-          }
-          "@
-
-          Add-Type -TypeDefinition $Source
+          echo "🌐 Installing Cloudflare WARP..."
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           
-          # إغلاق البيئة عند 17% تماماً
-          [GlobalCpuLock]::LockCurrentTree(17)
-          Write-Host "✅ Environment Root Process locked successfully at 17% CPU."
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
+
+          echo "🚀 Registering & Connecting WARP..."
+          warp-cli registration new
+          warp-cli mode warp
+          warp-cli connect
+          
+          # الانتظار والتأكد من نجاح الاتصال
+          sleep 3
+          warp-cli status
 
       # -----------------------------------------------------------
-      # باقي خطوات الـ Workflow الخاصة بك (ستعمل جميعها داخل حاجز الـ 17%)
+      # خطوة 2: تثبيت Chrome و CRD وأداة التقييد الصارم cpulimit
       # -----------------------------------------------------------
-      - name: Install Prerequisites (Chrome, CRD, VBox)
-        shell: pwsh
+      - name: Install Prerequisites & CPU Limiter
         run: |
-          Write-Host "⬇️ Downloading Chrome..."
-          Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile "chrome_installer.exe"
-          Start-Process -FilePath "chrome_installer.exe" -Args "/silent /install" -Wait
-          
-          Write-Host "⬇️ Downloading CRD Host..."
-          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
-          Start-Process -FilePath "msiexec.exe" -Args "/i crd.msi /quiet /qn" -Wait
+          echo "⬇️ Downloading & Installing Chrome & CRD..."
+          sudo apt-get update
+          sudo apt-get install -y wget curl xvfb cpulimit
 
-      - name: Start Chrome Remote Desktop
-        shell: pwsh
+          # تثبيت Google Chrome
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+          rm google-chrome-stable_current_amd64.deb
+
+          # تثبيت Chrome Remote Desktop
+          wget -q https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
+          sudo apt-get install -y ./chrome-remote-desktop_current_amd64.deb
+          rm chrome-remote-desktop_current_amd64.deb
+
+      # -----------------------------------------------------------
+      # خطوة 3: تشغيل Chrome Remote Desktop وتطوير حظر الـ 17% الصارم
+      # -----------------------------------------------------------
+      - name: Start Chrome Remote Desktop with 17% Limit
         env:
           CRD_CODE: ${{ secrets.CRD_CODE }}
           CRD_PIN: ${{ secrets.CRD_PIN }}
         run: |
-          $exePath = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-          $UniqueName = "${{ github.actor }}-Machine-${{ env.DEVICE_NUM }}"
-          
-          Write-Host "🚀 STARTING RDP SERVICE: $UniqueName"
-          & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name="$UniqueName" --pin=$env:CRD_PIN
+          UniqueName="${{ github.actor }}-Machine-${{ env.DEVICE_NUM }}"
+          echo "🚀 STARTING RDP SERVICE: $UniqueName"
 
+          # بدء الخدمة الرسومية لـ CRD
+          sudo USER=runner chrome-remote-desktop --start
+
+          # ربط الحساب بالتسجيل
+          DISPLAY= /opt/google/chrome-remote-desktop/start-host \
+            --code="$CRD_CODE" \
+            --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \
+            --name="$UniqueName" \
+            --pin="$CRD_PIN" &
+
+          # تطبيق التقييد الصارم (17%) على أداء النظام والعمليات
+          echo "🔒 Applying 17% CPU Hard Cap..."
+          sudo cpulimit -e chrome -l 17 -b
+          sudo cpulimit -e chrome-remote-desktop -l 17 -b
+
+      # -----------------------------------------------------------
+      # خطوة 4: البقاء (Keep Alive)
+      # -----------------------------------------------------------
       - name: Keep Alive
-        shell: pwsh
         run: |
-          Write-Host "✅ Both VMs are running..."
-          while ($true) { Start-Sleep -Seconds 300 }
+          echo "✅ Runner active, WARP connected, and CPU strictly capped at 17%."
+          while true; do sleep 300; done
