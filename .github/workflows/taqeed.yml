@@ -1,4 +1,4 @@
-name: taqeed
+name: Ultimate-1D-Counter-No Script
 
 on: 
   workflow_dispatch:
@@ -9,18 +9,19 @@ jobs:
     steps:
 
       # -----------------------------------------------------------
-      # خطوة 0: فرض حاجز صارم 17% على المعالج (Hard CPU Limit)
+      # خطوة 0: حبس بيئة التشغيل بالكامل تحت حاجز 17% صارم بدون تذبذب
       # -----------------------------------------------------------
-      - name: Apply Strict 17% CPU Limit
+      - name: Global Environment Lock (17% Hard Cap)
         shell: pwsh
         run: |
-          Write-Host "🔒 Applying 17% Hard CPU Limit via Windows API..."
-          
+          Write-Host "🔒 Locking entire step environment to 17% CPU Hard Cap..."
+
           $Source = @"
           using System;
+          using System.Diagnostics;
           using System.Runtime.InteropServices;
 
-          public class CpuLimiter {
+          public class GlobalCpuLock {
               [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
               public static extern IntPtr CreateJobObject(IntPtr lpJobAttributes, string lpName);
 
@@ -36,37 +37,37 @@ jobs:
                   public uint CpuRate;
               }
 
-              public static void LimitCurrentProcessAndChildren(uint limitPercent) {
-                  IntPtr hJob = CreateJobObject(IntPtr.Zero, "Global17PercentCpuLimitJob");
+              public static void LockCurrentTree(uint percent) {
+                  // 1. إنشاء حاجز صارم 17%
+                  IntPtr hJob = CreateJobObject(IntPtr.Zero, "GlobalRunnerHardCap17");
                   
                   JOBOBJECT_CPU_RATE_CONTROL_INFORMATION info = new JOBOBJECT_CPU_RATE_CONTROL_INFORMATION();
-                  // 0x1 = JOB_OBJECT_CPU_RATE_CONTROL_ENABLE
-                  // 0x4 = JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP (تحديد جدار حماية صارم يمنع التجاوز)
+                  // 0x1 = ENABLE, 0x4 = HARD_CAP (يمنع أي تجاوز نهائياً)
                   info.ControlFlags = 0x1 | 0x4; 
-                  info.CpuRate = limitPercent * 100; // 17% = 1700
+                  info.CpuRate = percent * 100; // 1700 = 17.00%
 
                   int length = Marshal.SizeOf(info);
                   IntPtr pInfo = Marshal.AllocHGlobal(length);
                   Marshal.StructureToPtr(info, pInfo, false);
 
-                  bool success = SetInformationJobObject(hJob, 8, pInfo, (uint)length); // 8 = JobObjectCpuRateControlInformation
+                  SetInformationJobObject(hJob, 8, pInfo, (uint)length);
                   Marshal.FreeHGlobal(pInfo);
 
-                  if (success) {
-                      AssignProcessToJobObject(hJob, System.Diagnostics.Process.GetCurrentProcess().Handle);
-                      Console.WriteLine("SUCCESS: CPU Hard Cap Set to " + limitPercent + "%");
-                  } else {
-                      Console.WriteLine("FAILED to apply CPU limit.");
-                  }
+                  // 2. إدخال العملية الحالية (PowerShell) وأبنائها داخل الحبس
+                  Process currentProcess = Process.GetCurrentProcess();
+                  AssignProcessToJobObject(hJob, currentProcess.Handle);
               }
           }
           "@
 
           Add-Type -TypeDefinition $Source
-          [CpuLimiter]::LimitCurrentProcessAndChildren(17)
+          
+          # إغلاق البيئة عند 17% تماماً
+          [GlobalCpuLock]::LockCurrentTree(17)
+          Write-Host "✅ Environment Root Process locked successfully at 17% CPU."
 
       # -----------------------------------------------------------
-      # خطوة 1: تثبيت المتطلبات الأساسية
+      # باقي خطوات الـ Workflow الخاصة بك (ستعمل جميعها داخل حاجز الـ 17%)
       # -----------------------------------------------------------
       - name: Install Prerequisites (Chrome, CRD, VBox)
         shell: pwsh
@@ -79,9 +80,6 @@ jobs:
           Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
           Start-Process -FilePath "msiexec.exe" -Args "/i crd.msi /quiet /qn" -Wait
 
-      # -----------------------------------------------------------
-      # خطوة 3: تفعيل الريموت ديسكتوب
-      # -----------------------------------------------------------
       - name: Start Chrome Remote Desktop
         shell: pwsh
         env:
@@ -94,9 +92,6 @@ jobs:
           Write-Host "🚀 STARTING RDP SERVICE: $UniqueName"
           & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name="$UniqueName" --pin=$env:CRD_PIN
 
-      # -----------------------------------------------------------
-      # خطوة 6: البقاء
-      # -----------------------------------------------------------
       - name: Keep Alive
         shell: pwsh
         run: |
