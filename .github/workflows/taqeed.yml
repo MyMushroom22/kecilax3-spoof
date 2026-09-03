@@ -8,16 +8,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      # -----------------------------------------------------------
+      # خطوة 1: تثبيت وتفعيل Cloudflare WARP (اتصال تلقائي)
+      # -----------------------------------------------------------
+      - name: Install & Connect Cloudflare WARP
+        run: |
+          echo "🌐 Installing Cloudflare WARP..."
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          
+          sudo apt-get update
+          sudo apt-get install -y cloudflare-warp
 
+          echo "🚀 Registering & Connecting WARP..."
+          warp-cli --accept-tos registration new || warp-cli registration new --accept-tos
+          warp-cli --accept-tos mode warp
+          warp-cli --accept-tos connect
+          
+          sleep 3
+          warp-cli status
 
       # -----------------------------------------------------------
-      # خطوة 2: تثبيت Chrome و CRD وأداة التقييد الصارم cpulimit
+      # خطوة 2: تثبيت Chrome و Chrome Remote Desktop
       # -----------------------------------------------------------
-      - name: Install Prerequisites & CPU Limiter
+      - name: Install Chrome & CRD
         run: |
           echo "⬇️ Downloading & Installing Chrome & CRD..."
           sudo apt-get update
-          sudo apt-get install -y wget curl xvfb cpulimit
+          sudo apt-get install -y wget curl xvfb dbus-x11 xfce4 xfce4-terminal
 
           # تثبيت Google Chrome
           wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
@@ -30,9 +48,9 @@ jobs:
           rm chrome-remote-desktop_current_amd64.deb
 
       # -----------------------------------------------------------
-      # خطوة 3: تشغيل Chrome Remote Desktop وتطبيق حظر الـ 17% الصارم
+      # خطوة 3: تشغيل Chrome Remote Desktop بكامل طاقة الجهاز
       # -----------------------------------------------------------
-      - name: Start Chrome Remote Desktop with 17% Limit
+      - name: Start Chrome Remote Desktop
         env:
           CRD_CODE: ${{ secrets.CRD_CODE }}
           CRD_PIN: ${{ secrets.CRD_PIN }}
@@ -40,25 +58,21 @@ jobs:
           UniqueName="${{ github.actor }}-Machine-${{ env.DEVICE_NUM }}"
           echo "🚀 STARTING RDP SERVICE: $UniqueName"
 
-          # بدء الخدمة الرسومية لـ CRD
-          sudo USER=runner chrome-remote-desktop --start
+          # إعداد مجلد الإعدادات لخدمة CRD
+          sudo mkdir -p /etc/chrome-remote-desktop
+          sudo chown -R runner:runner /etc/chrome-remote-desktop
 
-          # ربط الحساب بالتسجيل
+          # ربط وإطلاق خدمة Chrome Remote Desktop باستخدام المسار الصحيح المباشر
           DISPLAY= /opt/google/chrome-remote-desktop/start-host \
             --code="$CRD_CODE" \
             --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \
             --name="$UniqueName" \
             --pin="$CRD_PIN" &
 
-          # تطبيق التقييد الصارم (17%) على أداء النظام والعمليات
-          echo "🔒 Applying 17% CPU Hard Cap..."
-          sudo cpulimit -e chrome -l 17 -b
-          sudo cpulimit -e chrome-remote-desktop -l 17 -b
-
       # -----------------------------------------------------------
       # خطوة 4: البقاء (Keep Alive)
       # -----------------------------------------------------------
       - name: Keep Alive
         run: |
-          echo "✅ Runner active, WARP connected, and CPU strictly capped at 17%."
+          echo "✅ Runner active and WARP connected successfully."
           while true; do sleep 300; done
