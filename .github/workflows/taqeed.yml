@@ -1,4 +1,4 @@
-name: Isolated Container CPU Cap Test - Precision
+name: Strict 20% CPU Hard-Cap Test
 on: workflow_dispatch
 
 jobs:
@@ -12,62 +12,99 @@ jobs:
           Set-Service docker -StartupType Automatic
           Start-Service docker
 
-      - name: Run CPU Cap Verification Test
+      - name: Execute Strict CPU Hard-Cap Verification
         shell: pwsh
         run: |
           $script = @'
-          Write-Host "[CONTAINER] Starting CPU stress & precision sampler..."
+          Write-Host "[CONTAINER] Initializing C# maximum CPU stress threads..."
 
-          # كود ضغط خفيف وحاد بدون سحب ذاكرة
+          # كود ضغط أقصى بالطاقة الكاملة لطلب 100% معالج بشكل مستمر
           Add-Type -TypeDefinition @"
           using System;
           using System.Threading;
 
-          public class Burner {
-              public static void Run() {
-                  for (int i = 0; i < Environment.ProcessorCount; i++) {
-                      Thread t = new Thread(() => { while (true) {} });
+          public class StrictBurner {
+              public static void StartBurn() {
+                  int cores = Environment.ProcessorCount;
+                  for (int i = 0; i < cores * 2; i++) {
+                      Thread t = new Thread(() => {
+                          while (true) {
+                              // Tight infinite loop
+                          }
+                      });
                       t.IsBackground = true;
-                      t.Priority = ThreadPriority.BelowNormal;
+                      t.Priority = ThreadPriority.Highest;
                       t.Start();
                   }
               }
           }
           "@
 
-          [Burner]::Run()
+          [StrictBurner]::StartBurn()
 
-          Write-Host "[CONTAINER] Stabilizing workload (2 seconds)..."
-          Start-Sleep -Seconds 2
+          # فترة انتظار حتى يغلق Windows Job Object Rate Limiter الخناق على الحاوية
+          Write-Host "[CONTAINER] Waiting 3 seconds for CPU Rate Limiter to stabilize..."
+          Start-Sleep -Seconds 3
 
-          Write-Host "[CONTAINER] Measuring enforced average CPU limit..."
-          Write-Host "----------------------------------------------------"
+          Write-Host "[CONTAINER] Establishing baseline and starting strict interval monitoring..."
+          Write-Host "---------------------------------------------------------------------------------"
 
           $process = [System.Diagnostics.Process]::GetCurrentProcess()
-          $startCpu = $process.TotalProcessorTime
-          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          
+          # نقطة الصفر للقياس التراكمي واللحظي
+          $globalSw = [System.Diagnostics.Stopwatch]::StartNew()
+          $globalStartCpu = $process.TotalProcessorTime
 
-          # أخذ 10 عينات مع حساب المتوسط التراكمي المستمر
+          $lastCpu = $globalStartCpu
+          $maxIntervalUsage = 0
+          $exceeded = $false
+
           for ($i = 1; $i -le 10; $i++) {
+              $intervalSw = [System.Diagnostics.Stopwatch]::StartNew()
               Start-Sleep -Seconds 1
+              $intervalSw.Stop()
 
-              $elapsedMs = $sw.Elapsed.TotalMilliseconds
-              $cpuMs = ($process.TotalProcessorTime - $startCpu).TotalMilliseconds
-              
-              # حساب متوسط النسبة المئوية للتنفيذ من نواة واحدة
-              $avgUsage = ($cpuMs / $elapsedMs) * 100
+              $currentCpu = $process.TotalProcessorTime
+              $currentTimeMs = $globalSw.Elapsed.TotalMilliseconds
 
-              Write-Host "Sample $i/10 -> Cumulative Average Usage: $($avgUsage.ToString('0.0'))% of 1 Core (Target: ~20.0%)"
+              # 1. الاستهلاك اللحظي خلال الثانية الحالية فقط
+              $intervalCpuMs = ($currentCpu - $lastCpu).TotalMilliseconds
+              $intervalTimeMs = $intervalSw.Elapsed.TotalMilliseconds
+              $instantUsage = ($intervalCpuMs / $intervalTimeMs) * 100
+
+              # 2. الاستهلاك التراكمي الإجمالي
+              $totalCpuMs = ($currentCpu - $globalStartCpu).TotalMilliseconds
+              $cumulativeUsage = ($totalCpuMs / $currentTimeMs) * 100
+
+              if ($instantUsage -gt $maxIntervalUsage) {
+                  $maxIntervalUsage = $instantUsage
+              }
+
+              $lastCpu = $currentCpu
+
+              # السماح بنسبة 21.0% كحد أقصى للتعامل مع دقة ساعات ويندوز (15.6ms Quantums)
+              $status = if ($instantUsage -le 21.0) { "OK" } else { "BREACHED!" }
+              Write-Host "Sample $i/10 -> Instant: $($instantUsage.ToString('0.0'))% | Cumulative: $($cumulativeUsage.ToString('0.0'))% [$status]"
+
+              if ($instantUsage -gt 21.0) {
+                  $exceeded = $true
+              }
           }
 
-          $sw.Stop()
-          Write-Host "----------------------------------------------------"
-          
-          # الحاوية تعمل بشكل صحيح إذا كان المتوسط التراكمي لا يتجاوز 22%
-          if ($avgUsage -le 22.0) {
-              Write-Host "✅ SUCCESS: Windows Job Object capped CPU strictly at $($avgUsage.ToString('0.0'))%!"
+          $globalSw.Stop()
+
+          Write-Host "---------------------------------------------------------------------------------"
+          Write-Host "=== FINAL HARD-CAP VERIFICATION ==="
+          Write-Host "Target Limit        : 20.0% of 1 Core"
+          Write-Host "Peak Instant Usage  : $($maxIntervalUsage.ToString('0.0'))%"
+          Write-Host "Final Cumulative    : $($cumulativeUsage.ToString('0.0'))%"
+          Write-Host "---------------------------------------------------------------------------------"
+
+          if (-not $exceeded) {
+              Write-Host "✅ HARD-CAP STRICTLY ENFORCED: CPU usage never breached the 20% limit!"
           } else {
-              Write-Host "❌ WARNING: Average CPU usage ($($avgUsage.ToString('0.0'))%) exceeded cap!"
+              Write-Host "❌ HARD-CAP BREACHED: CPU usage exceeded the limit during runtime!"
+              exit 1
           }
           '@
 
