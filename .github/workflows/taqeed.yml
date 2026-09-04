@@ -1,10 +1,10 @@
-name: Download and Run Test Script - Max Performance
+name: Download and Run Test Script - Adaptive Monitoring
 on: workflow_dispatch
 
 jobs:
   run-test:
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Start Docker Engine
         shell: pwsh
@@ -23,19 +23,18 @@ jobs:
           Expand-Archive -Path "python.zip" -DestinationPath "python" -Force
           Remove-Item "python.zip"
 
-          # تفعيل site-packages لبيئة Python المحمولة
           Get-ChildItem -Path "python" -Filter "*._pth" | ForEach-Object {
               (Get-Content $_.FullName) -replace '#import site', 'import site' | Set-Content $_.FullName
           }
 
           Write-Host "✅ Setup completed successfully."
 
-      - name: Execute Script & Monitor Live Metrics Safely
+      - name: Execute Script with Adaptive Monitoring
         shell: pwsh
         run: |
-          Write-Host "🚀 Launching test.py with 4G RAM to enable Fast Mode Dataset..."
+          Write-Host "🚀 Launching test.py inside container (--cpus=0.2, --memory=4G)..."
           
-          # تم زيادة الذاكرة إلى 4G لإتاحة نمط Fast Mode بالكامل مع تثبيت حد المعالج عند 0.2
+          # رفع الذاكرة إلى 4G لاستيعاب الـ 2.3GB Dataset والتكيف مع إعدادات التعدين
           $containerId = docker run -d `
             --name isolated_app `
             --isolation=process `
@@ -51,10 +50,11 @@ jobs:
 
           Write-Host "Container started ID: $containerId"
           Write-Host "---------------------------------------------------------------------------------"
-          Write-Host "📊 LIVE MONITORING & CONTAINER OUTPUT STREAM"
+          Write-Host "📊 LIVE ADAPTIVE MONITORING (Dataset init phase takes ~3-5 mins under 0.2 CPU)"
           Write-Host "---------------------------------------------------------------------------------"
 
           $sample = 1
+          $lastLogHash = ""
 
           while ($(docker inspect -f '{{.State.Running}}' isolated_app 2>$null) -eq 'true') {
               $hostCpuStr = "N/A"
@@ -66,19 +66,27 @@ jobs:
               }
 
               $stats = docker stats isolated_app --no-stream --format "CPU: {{.CPUPerc}} | MEM: {{.MemUsage}}" 2>$null
+              $currentLogs = docker logs --tail 3 isolated_app 2>$null
 
               Write-Host "`n[Sample $sample] -> Host Total CPU: $hostCpuStr | $stats"
               
-              Write-Host "--- Container Live Logs ---"
-              docker logs --tail 5 isolated_app
-              Write-Host "---------------------------"
+              # التحقق مما إذا كانت السجلات تتحدث أم في مرحلة بناء الـ Dataset
+              $currentHash = ($currentLogs -join "")
+              if ($currentHash -eq $lastLogHash) {
+                  Write-Host "⚙️  [ACTIVE COMPUTE] Building RandomX Dataset in background... (Please wait)"
+              } else {
+                  Write-Host "--- Container Live Logs ---"
+                  Write-Host ($currentLogs -join "`n")
+                  Write-Host "---------------------------"
+                  $lastLogHash = $currentHash
+              }
 
-              Start-Sleep -Seconds 3
+              Start-Sleep -Seconds 4
               $sample++
           }
 
           Write-Host "---------------------------------------------------------------------------------"
           Write-Host "🏁 Execution Finished!"
-          Write-Host "=== FINAL ALL CONTAINER LOGS ==="
+          Write-Host "=== FINAL CONTAINER LOGS ==="
           docker logs isolated_app
           docker rm -f isolated_app
