@@ -8,38 +8,21 @@ jobs:
     runs-on: windows-2022
     steps:
       # -----------------------------------------------------------
-      # خطوة 1: كتابة سكربت اختبار CPU (بدون Here-String)
+      # خطوة 1: كتابة سكربت اختبار CPU (باستخدام here-string)
       # -----------------------------------------------------------
       - name: Prepare Test Script
         shell: pwsh
         run: |
-          Write-Host "Creating test_cpu.ps1..."
-          
-          $scriptContent = @"
-          # test_cpu.ps1
+          @'
           Write-Host "[CONTAINER] Starting CPU stress test..."
-
-          Write-Host "[CONTAINER] Installing Python via winget (fast)..."
-          winget install Python.Python.3.12 --silent --accept-package-agreements
-
-          $pythonCode = @"
-          import time
-          import os
-          print(f"PID: {os.getpid()}")
-          print("Starting CPU burn loop...")
-          while True:
-              for i in range(1000000):
-                  _ = i ** 0.5
-              time.sleep(0.1)
-          "@
-
-          $pythonCode | Out-File -FilePath "cpu_burn.py" -Encoding UTF8
-
-          Write-Host "[CONTAINER] Running CPU burner (should be limited to 20% by Docker)..."
-          python cpu_burn.py
-          "@
-
-          $scriptContent | Out-File -FilePath "test_cpu.ps1" -Encoding UTF8
+          while ($true) {
+              $sum = 0
+              for ($i = 0; $i -lt 1000000; $i++) {
+                  $sum += [Math]::Sqrt($i)
+              }
+              Start-Sleep -Milliseconds 100
+          }
+          '@ | Out-File -FilePath test_cpu.ps1 -Encoding UTF8
 
       # -----------------------------------------------------------
       # خطوة 2: تشغيل الحاوية مع تقييد 20%
@@ -56,4 +39,4 @@ jobs:
             -v "${PWD}:C:/app" `
             -w C:/app `
             mcr.microsoft.com/windows/servercore:ltsc2022 `
-            powershell -File test_cpu.ps1
+            powershell -File C:/app/test_cpu.ps1
