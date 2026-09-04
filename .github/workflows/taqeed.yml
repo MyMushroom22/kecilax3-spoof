@@ -1,4 +1,4 @@
-name: Download and Run Test Script with Safe Live Metrics
+name: Download and Run Test Script - Max Performance
 on: workflow_dispatch
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
           Expand-Archive -Path "python.zip" -DestinationPath "python" -Force
           Remove-Item "python.zip"
 
-          # تفعيل pip ببيئة Python Embeddable
+          # تفعيل site-packages لبيئة Python المحمولة
           Get-ChildItem -Path "python" -Filter "*._pth" | ForEach-Object {
               (Get-Content $_.FullName) -replace '#import site', 'import site' | Set-Content $_.FullName
           }
@@ -33,13 +33,14 @@ jobs:
       - name: Execute Script & Monitor Live Metrics Safely
         shell: pwsh
         run: |
-          Write-Host "🚀 Launching test.py inside capped container (--cpus=0.2, --memory=2G)..."
+          Write-Host "🚀 Launching test.py with 4G RAM to enable Fast Mode Dataset..."
           
+          # تم زيادة الذاكرة إلى 4G لإتاحة نمط Fast Mode بالكامل مع تثبيت حد المعالج عند 0.2
           $containerId = docker run -d `
             --name isolated_app `
             --isolation=process `
             --cpus=0.2 `
-            --memory=2G `
+            --memory=4G `
             -e PYTHONUTF8=1 `
             -e PYTHONIOENCODING=utf-8 `
             -e PYTHONUNBUFFERED=1 `
@@ -56,13 +57,12 @@ jobs:
           $sample = 1
 
           while ($(docker inspect -f '{{.State.Running}}' isolated_app 2>$null) -eq 'true') {
-              # قياس استهلاك السيرفر بطريقة آمنة تتفادى استثناءات Get-Counter
               $hostCpuStr = "N/A"
               try {
                   $sampleVal = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop).CounterSamples[0].CookedValue
                   if ($sampleVal -ge 0) { $hostCpuStr = "$($sampleVal.ToString('0.0'))%" }
               } catch {
-                  $hostCpuStr = "Re-indexing..."
+                  $hostCpuStr = "Sampling..."
               }
 
               $stats = docker stats isolated_app --no-stream --format "CPU: {{.CPUPerc}} | MEM: {{.MemUsage}}" 2>$null
