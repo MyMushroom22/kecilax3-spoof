@@ -8,4 +8,70 @@ jobs:
       - name: Run CPU Stress in Container
         shell: pwsh
         run: |
-          docker run --rm --isolation=process --cpus=0.2 --memory=2G mcr.microsoft.com/windows/servercore:ltsc2022 powershell -Command "Write-Host 'Starting stress test...'; $jobs = @(); 1..4 | ForEach-Object { $jobs += Start-Job -ScriptBlock { while ($true) { $sum = 0.0; for ($i = 0; $i -lt 1000000; $i++) { $sum += [Math]::Sqrt($i) } } } }; Write-Host 'Collecting samples for 60 seconds...'; $samples = @(); for ($i = 0; $i -lt 30; $i++) { Start-Sleep -Seconds 2; $cpu = (Get-Counter -Counter '\Processor(_Total)\% Processor Time').CounterSamples[0].CookedValue; $samples += $cpu; Write-Host ('Sample {0}: {1:N1}%' -f ($i+1), $cpu) }; $jobs | ForEach-Object { Stop-Job $_; Remove-Job $_ }; $avg = ($samples | Measure-Object -Average).Average; $max = ($samples | Measure-Object -Maximum).Maximum; Write-Host 'Average: ' $avg ' Max: ' $max"
+          # كتابة سكربت الاختبار داخل مجلد العمل
+          $script = @'
+          Write-Host "[CONTAINER] Starting CPU stress test (4 threads, no sleep)..."
+          Write-Host "[CONTAINER] This will push CPU to the 20% cap."
+
+          # تشغيل 4 خيوط (لضمان استهلاك كل الحصة المخصصة)
+          $jobs = @()
+          1..4 | ForEach-Object {
+              $jobs += Start-Job -ScriptBlock {
+                  # حلقة لا نهائية من العمليات الحسابية الثقيلة (بدون نوم)
+                  while ($true) {
+                      $sum = 0.0
+                      for ($i = 0; $i -lt 1000000; $i++) {
+                          $sum += [Math]::Sqrt($i)
+                      }
+                  }
+              }
+          }
+
+          Write-Host "[CONTAINER] Collecting CPU samples every 2 seconds for 60 seconds..."
+          $samples = @()
+          for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 2
+              try {
+                  $cpu = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop).CounterSamples[0].CookedValue
+                  $samples += $cpu
+                  Write-Host ("Sample {0}: {1:N1}%" -f ($i+1), $cpu)
+              } catch {
+                  Write-Host "Sample $($i+1): [error]"
+              }
+          }
+
+          # إنهاء المهام
+          foreach ($job in $jobs) {
+              Stop-Job $job
+              Remove-Job $job
+          }
+
+          if ($samples.Count -gt 0) {
+              $avg = ($samples | Measure-Object -Average).Average
+              $max = ($samples | Measure-Object -Maximum).Maximum
+              Write-Host "======================================"
+              Write-Host "=== FINAL RESULT ==="
+              Write-Host "Average Total CPU Usage: $($avg.ToString('0.0'))%"
+              Write-Host "Maximum Total CPU Usage: $($max.ToString('0.0'))%"
+              Write-Host "======================================"
+              if ($max -le 22) {
+                  Write-Host "✅ SUCCESS: CPU limit is working correctly!"
+              } else {
+                  Write-Host "❌ WARNING: CPU exceeded limit (should be ~20%)!"
+              }
+          } else {
+              Write-Host "⚠️ No samples collected."
+          }
+          '@
+          # حفظ السكربت في ملف داخل مجلد العمل
+          $script | Out-File -FilePath stress.ps1 -Encoding ASCII
+
+          # تشغيل الحاوية مع ربط المجلد الحالي وتنفيذ السكربت
+          docker run --rm `
+            --isolation=process `
+            --cpus=0.2 `
+            --memory=2G `
+            -v "${PWD}:C:/app" `
+            -w C:/app `
+            mcr.microsoft.com/windows/servercore:ltsc2022 `
+            powershell -ExecutionPolicy Bypass -File C:/app/stress.ps1
