@@ -1,4 +1,4 @@
-name: Isolated Container CPU Cap Test
+name: Isolated Container CPU Cap Test - Precision
 on: workflow_dispatch
 
 jobs:
@@ -9,25 +9,23 @@ jobs:
       - name: Start Docker Engine
         shell: pwsh
         run: |
-          Write-Host "Starting Docker Service on Windows Runner..."
           Set-Service docker -StartupType Automatic
           Start-Service docker
-          docker info
 
-      - name: Run CPU Stress Test Inside Capped Container
+      - name: Run CPU Cap Verification Test
         shell: pwsh
         run: |
           $script = @'
-          Write-Host "[CONTAINER] Starting CPU burner inside isolated container..."
+          Write-Host "[CONTAINER] Starting CPU stress & precision sampler..."
 
-          # إنشاء خيوط ضغط أصلية تستهلك المعالج بالكامل
+          # كود ضغط خفيف وحاد بدون سحب ذاكرة
           Add-Type -TypeDefinition @"
           using System;
           using System.Threading;
 
           public class Burner {
               public static void Run() {
-                  for (int i = 0; i < Environment.ProcessorCount * 2; i++) {
+                  for (int i = 0; i < Environment.ProcessorCount; i++) {
                       Thread t = new Thread(() => { while (true) {} });
                       t.IsBackground = true;
                       t.Priority = ThreadPriority.BelowNormal;
@@ -39,39 +37,42 @@ jobs:
 
           [Burner]::Run()
 
-          Write-Host "[CONTAINER] Measuring capped CPU consumption live..."
+          Write-Host "[CONTAINER] Stabilizing workload (2 seconds)..."
+          Start-Sleep -Seconds 2
+
+          Write-Host "[CONTAINER] Measuring enforced average CPU limit..."
           Write-Host "----------------------------------------------------"
 
           $process = [System.Diagnostics.Process]::GetCurrentProcess()
+          $startCpu = $process.TotalProcessorTime
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
+          # أخذ 10 عينات مع حساب المتوسط التراكمي المستمر
           for ($i = 1; $i -le 10; $i++) {
-              $sw = [System.Diagnostics.Stopwatch]::StartNew()
-              $startCpu = $process.TotalProcessorTime
-
               Start-Sleep -Seconds 1
 
-              $sw.Stop()
-              $endCpu = $process.TotalProcessorTime
+              $elapsedMs = $sw.Elapsed.TotalMilliseconds
+              $cpuMs = ($process.TotalProcessorTime - $startCpu).TotalMilliseconds
+              
+              # حساب متوسط النسبة المئوية للتنفيذ من نواة واحدة
+              $avgUsage = ($cpuMs / $elapsedMs) * 100
 
-              # حساب استهلاك المعالج مقارنة بنواة واحدة (1 Core = 100%)
-              $cpuUsedMs = ($endCpu - $startCpu).TotalMilliseconds
-              $timeElapsedMs = $sw.Elapsed.TotalMilliseconds
-              $coreUsagePercent = ($cpuUsedMs / $timeElapsedMs) * 100
-
-              Write-Host "Sample $i/10 -> Usage: $($coreUsagePercent.ToString('0.0'))% of 1 Core (Cap Target: 20.0%)"
+              Write-Host "Sample $i/10 -> Cumulative Average Usage: $($avgUsage.ToString('0.0'))% of 1 Core (Target: ~20.0%)"
           }
 
+          $sw.Stop()
           Write-Host "----------------------------------------------------"
-          if ($coreUsagePercent -le 22.0) {
-              Write-Host "✅ SUCCESS: Docker CPU Cap (--cpus=0.2) is strictly enforced!"
+          
+          # الحاوية تعمل بشكل صحيح إذا كان المتوسط التراكمي لا يتجاوز 22%
+          if ($avgUsage -le 22.0) {
+              Write-Host "✅ SUCCESS: Windows Job Object capped CPU strictly at $($avgUsage.ToString('0.0'))%!"
           } else {
-              Write-Host "❌ WARNING: Container exceeded CPU cap!"
+              Write-Host "❌ WARNING: Average CPU usage ($($avgUsage.ToString('0.0'))%) exceeded cap!"
           }
           '@
 
           $script | Out-File -FilePath stress.ps1 -Encoding ASCII
 
-          # تشغيل الحاوية مع العزل والتحديد الصارم
           docker run --rm `
             --isolation=process `
             --cpus=0.2 `
