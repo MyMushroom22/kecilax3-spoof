@@ -1,4 +1,4 @@
-name: Container Max CPU Stress Test (Limit 20%)
+name: Container Max CPU Stress Test (Limit 20% - Real)
 
 on: 
   workflow_dispatch:
@@ -8,62 +8,45 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
-      # -----------------------------------------------------------
-      # خطوة 1: كتابة سكربت اختبار الإجهاد مع قياس CPU
-      # -----------------------------------------------------------
       - name: Prepare Stress Script
         shell: pwsh
         run: |
           Write-Host "Generating stress_test.ps1..."
           @'
-          Write-Host "[CONTAINER] Starting MAX CPU stress test..."
-          Write-Host "[CONTAINER] This will consume as much CPU as allowed (capped at 20% by Docker)."
+          Write-Host "[CONTAINER] Starting REAL MAX CPU stress test..."
+          Write-Host "[CONTAINER] This will consume 100% of the allocated CPU (capped at 20% by Docker)."
 
-          # تشغيل 4 خيوط تستهلك CPU لأقصى حمل
+          # تشغيل عدد من الخيوط يساوي عدد النوى (4) مع حمل ثقيل جداً
           $jobs = @()
           for ($i = 0; $i -lt 4; $i++) {
               $jobs += Start-Job -ScriptBlock {
+                  # حلقة لا نهائية مع حساب ثقيل جداً، بدون نوم طويل
                   while ($true) {
-                      $sum = 0
-                      for ($j = 0; $j -lt 10000000; $j++) {
-                          $sum += [Math]::Sqrt($j)
+                      $sum = 0.0
+                      for ($j = 0; $j -lt 100000; $j++) {
+                          $sum += [Math]::Sqrt($j) * [Math]::Sqrt($j + 1)
                       }
-                      Start-Sleep -Milliseconds 50
+                      # نوم قصير جداً (1 مللي) لمنع تجميد النظام لكن مع الحفاظ على استهلاك مرتفع
+                      Start-Sleep -Milliseconds 1
                   }
               }
           }
 
-          Write-Host "[CONTAINER] Collecting CPU samples every 3 seconds for 30 seconds..."
-
-          # دالة للحصول على استهلاك CPU بأمان
-          function Get-CpuUsage {
+          Write-Host "[CONTAINER] Collecting CPU samples every 2 seconds for 30 seconds..."
+          $samples = @()
+          for ($i = 0; $i -lt 15; $i++) {
+              Start-Sleep -Seconds 2
               try {
                   $counter = Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop
-                  return $counter.CounterSamples[0].CookedValue
-              } catch {
-                  # محاولة بديلة باستخدام typeperf
-                  try {
-                      $output = & typeperf "\Processor(_Total)\% Processor Time" -sc 1 2>$null
-                      $match = [regex]::Match($output, '(\d+\.\d+)')
-                      if ($match.Success) { return [double]$match.Value }
-                  } catch {}
-                  return $null
-              }
-          }
-
-          $samples = @()
-          for ($i = 0; $i -lt 10; $i++) {
-              Start-Sleep -Seconds 3
-              $cpu = Get-CpuUsage
-              if ($cpu -ne $null) {
+                  $cpu = $counter.CounterSamples[0].CookedValue
                   $samples += $cpu
                   Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
-              } else {
+              } catch {
                   Write-Host "Sample $($i+1): [failed to read]"
               }
           }
 
-          # إنهاء مهام الإجهاد
+          # إنهاء المهام
           foreach ($job in $jobs) {
               Stop-Job $job
               Remove-Job $job
@@ -83,18 +66,14 @@ jobs:
                   Write-Host "❌ WARNING: CPU usage exceeded limit (should be ~20%)!"
               }
           } else {
-              Write-Host "⚠️ No samples collected. The limit test cannot be confirmed."
+              Write-Host "⚠️ No samples collected."
           }
           '@ | Out-File -FilePath stress_test.ps1 -Encoding ASCII
 
-      # -----------------------------------------------------------
-      # خطوة 2: تشغيل الحاوية مع تقييد 20%
-      # -----------------------------------------------------------
       - name: Run Stress Test in Container
         shell: pwsh
         run: |
-          Write-Host "🚀 Launching container with CPU limit 20% (stress test)..."
-          
+          Write-Host "🚀 Launching container with CPU limit 20% (real stress)..."
           docker run --rm `
             --isolation=process `
             --cpus=0.2 `
