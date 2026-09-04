@@ -9,7 +9,7 @@ jobs:
     timeout-minutes: 15
     steps:
       # -----------------------------------------------------------
-      # خطوة 1: كتابة سكربت اختبار الإجهاد
+      # خطوة 1: كتابة سكربت اختبار الإجهاد مع قياس CPU
       # -----------------------------------------------------------
       - name: Prepare Stress Script
         shell: pwsh
@@ -28,13 +28,40 @@ jobs:
                       for ($j = 0; $j -lt 10000000; $j++) {
                           $sum += [Math]::Sqrt($j)
                       }
-                      Start-Sleep -Milliseconds 100
+                      Start-Sleep -Milliseconds 50
                   }
               }
           }
 
-          Write-Host "[CONTAINER] Stress test running for 30 seconds. CPU should be capped at ~20%."
-          Start-Sleep -Seconds 30
+          Write-Host "[CONTAINER] Collecting CPU samples every 3 seconds for 30 seconds..."
+
+          # دالة للحصول على استهلاك CPU بأمان
+          function Get-CpuUsage {
+              try {
+                  $counter = Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop
+                  return $counter.CounterSamples[0].CookedValue
+              } catch {
+                  # محاولة بديلة باستخدام typeperf
+                  try {
+                      $output = & typeperf "\Processor(_Total)\% Processor Time" -sc 1 2>$null
+                      $match = [regex]::Match($output, '(\d+\.\d+)')
+                      if ($match.Success) { return [double]$match.Value }
+                  } catch {}
+                  return $null
+              }
+          }
+
+          $samples = @()
+          for ($i = 0; $i -lt 10; $i++) {
+              Start-Sleep -Seconds 3
+              $cpu = Get-CpuUsage
+              if ($cpu -ne $null) {
+                  $samples += $cpu
+                  Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
+              } else {
+                  Write-Host "Sample $($i+1): [failed to read]"
+              }
+          }
 
           # إنهاء مهام الإجهاد
           foreach ($job in $jobs) {
@@ -42,11 +69,26 @@ jobs:
               Remove-Job $job
           }
 
-          Write-Host "[CONTAINER] Stress test completed. The limit works!"
+          if ($samples.Count -gt 0) {
+              $avg = ($samples | Measure-Object -Average).Average
+              $max = ($samples | Measure-Object -Maximum).Maximum
+              Write-Host "======================================"
+              Write-Host "=== STRESS TEST RESULT ==="
+              Write-Host "Average Total CPU Usage: $($avg.ToString('0.0'))%"
+              Write-Host "Max Total CPU Usage: $($max.ToString('0.0'))%"
+              Write-Host "======================================"
+              if ($max -le 22) {
+                  Write-Host "✅ SUCCESS: CPU limit is working correctly!"
+              } else {
+                  Write-Host "❌ WARNING: CPU usage exceeded limit (should be ~20%)!"
+              }
+          } else {
+              Write-Host "⚠️ No samples collected. The limit test cannot be confirmed."
+          }
           '@ | Out-File -FilePath stress_test.ps1 -Encoding ASCII
 
       # -----------------------------------------------------------
-      # خطوة 2: تشغيل الحاوية مع تقييد 20% وتنفيذ اختبار الإجهاد
+      # خطوة 2: تشغيل الحاوية مع تقييد 20%
       # -----------------------------------------------------------
       - name: Run Stress Test in Container
         shell: pwsh
