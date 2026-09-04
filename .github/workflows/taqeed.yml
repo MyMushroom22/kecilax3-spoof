@@ -30,12 +30,14 @@ jobs:
         run: |
           Write-Host "🚀 Launching test.py inside isolated capped container (--cpus=0.2, --memory=2G)..."
           
-          # تشغيل الحاوية في الخلفية
+          # تشغيل الحاوية مع تفعيل ترميز UTF-8 لمنع أخطاء الـ UnicodeEncodeError
           $containerId = docker run -d `
             --name isolated_app `
             --isolation=process `
             --cpus=0.2 `
             --memory=2G `
+            -e PYTHONUTF8=1 `
+            -e PYTHONIOENCODING=utf-8 `
             -v "${PWD}:C:/app" `
             -w C:/app `
             mcr.microsoft.com/windows/servercore:ltsc2022 `
