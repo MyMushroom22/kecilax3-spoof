@@ -39,7 +39,7 @@ jobs:
           $containerId = docker run -d `
             --name isolated_app `
             --isolation=process `
-            --cpus=0.2 `
+            --cpus=0.4 `
             --memory=2G `
             -e PYTHONUTF8=1 `
             -e PYTHONIOENCODING=utf-8 `
