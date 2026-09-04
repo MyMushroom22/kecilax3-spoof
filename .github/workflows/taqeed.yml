@@ -1,48 +1,68 @@
 name: CPU Cap Test - Real
 on: workflow_dispatch
+
 jobs:
   build:
     runs-on: windows-2022
     timeout-minutes: 10
     steps:
-      - name: Run CPU Stress in Container (4 processes)
+      - name: Run Hardcore CPU Stress in Container
         shell: pwsh
         run: |
           $script = @'
-          Write-Host "[CONTAINER] Starting REAL CPU stress with 4 separate processes..."
+          Write-Host "[CONTAINER] Starting HARDCORE CPU stress using C# native threads..."
 
-          # تشغيل 4 عمليات PowerShell منفصلة (بدون Start-Job)
-          1..4 | ForEach-Object {
-              Start-Process -FilePath "powershell" -ArgumentList "-Command `"while (`$true) { `$sum = 0.0; for (`$i = 0; `$i -lt 1000000; `$i++) { `$sum += [Math]::Sqrt(`$i) } }`"" -WindowStyle Hidden
+          # تجميع كود C# ينشئ مسارات ضغط عالية الأولوية فوراً
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Threading;
+
+          public class CpuBurner {
+              public static void Burn(int threadCount) {
+                  for (int i = 0; i < threadCount; i++) {
+                      Thread t = new Thread(() => {
+                          while (true) {
+                              // Tight infinite loop to maximize CPU pipeline usage
+                          }
+                      });
+                      t.IsBackground = true;
+                      t.Priority = ThreadPriority.Highest;
+                      t.Start();
+                  }
+              }
           }
+          "@
 
-          Write-Host "[CONTAINER] Collecting CPU samples every 2 seconds for 60 seconds..."
+          # تشغيل 8 مسارات (Threads) لضمان إشباع كافة الأنوية فوراً
+          [CpuBurner]::Burn(8)
+
+          Write-Host "[CONTAINER] CPU stress active. Sampling metrics every 2 seconds..."
           $samples = @()
-          for ($i = 0; $i -lt 30; $i++) {
+
+          for ($i = 0; $i -lt 15; $i++) {
               Start-Sleep -Seconds 2
               try {
                   $cpu = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop).CounterSamples[0].CookedValue
                   $samples += $cpu
                   Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
               } catch {
-                  Write-Host "Sample $($i+1): [error]"
+                  Write-Host "Sample $($i+1): [error reading counter]"
               }
           }
 
-          # إنهاء عمليات PowerShell الزائدة
-          Get-Process -Name powershell -ErrorAction SilentlyContinue | Where-Object { $_.Id -ne $pid } | Stop-Process -Force
-
           $avg = ($samples | Measure-Object -Average).Average
           $max = ($samples | Measure-Object -Maximum).Maximum
+
           Write-Host "======================================"
           Write-Host "=== FINAL RESULT ==="
-          Write-Host "Average Total CPU Usage: $($avg.ToString('0.0'))%"
-          Write-Host "Maximum Total CPU Usage: $($max.ToString('0.0'))%"
+          Write-Host "Average CPU Usage: $($avg.ToString('0.0'))%"
+          Write-Host "Maximum CPU Usage: $($max.ToString('0.0'))%"
           Write-Host "======================================"
+
           if ($max -le 22) {
-              Write-Host "✅ SUCCESS: CPU limit is working correctly!"
+              Write-Host "✅ SUCCESS: CPU cap constraint (--cpus=0.2) enforced properly!"
           } else {
-              Write-Host "❌ WARNING: CPU exceeded limit (should be ~20%)!"
+              Write-Host "❌ WARNING: CPU exceeded limit!"
           }
           '@
           $script | Out-File -FilePath stress.ps1 -Encoding ASCII
