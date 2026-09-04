@@ -6,61 +6,75 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 10
     steps:
-      - name: Run Hardcore CPU Stress in Container
+      - name: Run Instant CPU Stress Test
         shell: pwsh
         run: |
           $script = @'
-          Write-Host "[CONTAINER] Starting HARDCORE CPU stress using C# native threads..."
+          Write-Host "[CONTAINER] Starting instant CPU stress test..."
 
-          # تجميع كود C# ينشئ مسارات ضغط عالية الأولوية فوراً
+          # كود C# مع ضبط أولوية BelowNormal لمنع تجميد خيط القراءة
           Add-Type -TypeDefinition @"
           using System;
           using System.Threading;
 
           public class CpuBurner {
-              public static void Burn(int threadCount) {
-                  for (int i = 0; i < threadCount; i++) {
+              public static void StartBurn(int count) {
+                  for (int i = 0; i < count; i++) {
                       Thread t = new Thread(() => {
                           while (true) {
-                              // Tight infinite loop to maximize CPU pipeline usage
+                              // Tight loop to maximize CPU pipeline
                           }
                       });
                       t.IsBackground = true;
-                      t.Priority = ThreadPriority.Highest;
+                      t.Priority = ThreadPriority.BelowNormal;
                       t.Start();
                   }
               }
           }
           "@
 
-          # تشغيل 8 مسارات (Threads) لضمان إشباع كافة الأنوية فوراً
-          [CpuBurner]::Burn(8)
+          # تشغيل 8 خيوط لضمان الضغط على كافة الأنوية
+          [CpuBurner]::StartBurn(8)
 
-          Write-Host "[CONTAINER] CPU stress active. Sampling metrics every 2 seconds..."
-          $samples = @()
+          Write-Host "[CONTAINER] Stress active! Measuring instant CPU usage every 1 second..."
 
-          for ($i = 0; $i -lt 15; $i++) {
-              Start-Sleep -Seconds 2
-              try {
-                  $cpu = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop).CounterSamples[0].CookedValue
-                  $samples += $cpu
-                  Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
-              } catch {
-                  Write-Host "Sample $($i+1): [error reading counter]"
-              }
+          $process = [System.Diagnostics.Process]::GetCurrentProcess()
+          $cores = [Environment]::ProcessorCount
+
+          $maxCpu = 0
+          $totalCpu = 0
+          $sampleCount = 10
+
+          for ($i = 1; $i -le $sampleCount; $i++) {
+              $sw = [System.Diagnostics.Stopwatch]::StartNew()
+              $startCpu = $process.TotalProcessorTime
+
+              Start-Sleep -Seconds 1
+
+              $sw.Stop()
+              $endCpu = $process.TotalProcessorTime
+
+              # حساب استهلاك المعالج الفلي لحظياً
+              $cpuUsedMs = ($endCpu - $startCpu).TotalMilliseconds
+              $timeElapsedMs = $sw.Elapsed.TotalMilliseconds
+              $cpuPercent = ($cpuUsedMs / ($timeElapsedMs * $cores)) * 100
+
+              if ($cpuPercent -gt $maxCpu) { $maxCpu = $cpuPercent }
+              $totalCpu += $cpuPercent
+
+              Write-Host "Sample $i/$sampleCount -> Instant CPU Usage: $($cpuPercent.ToString('0.0'))%"
           }
 
-          $avg = ($samples | Measure-Object -Average).Average
-          $max = ($samples | Measure-Object -Maximum).Maximum
+          $avgCpu = $totalCpu / $sampleCount
 
           Write-Host "======================================"
           Write-Host "=== FINAL RESULT ==="
-          Write-Host "Average CPU Usage: $($avg.ToString('0.0'))%"
-          Write-Host "Maximum CPU Usage: $($max.ToString('0.0'))%"
+          Write-Host "Average CPU Usage: $($avgCpu.ToString('0.0'))%"
+          Write-Host "Maximum CPU Usage: $($maxCpu.ToString('0.0'))%"
           Write-Host "======================================"
 
-          if ($max -le 22) {
-              Write-Host "✅ SUCCESS: CPU cap constraint (--cpus=0.2) enforced properly!"
+          if ($maxCpu -le 22) {
+              Write-Host "✅ SUCCESS: CPU cap limit (--cpus=0.2) is working correctly!"
           } else {
               Write-Host "❌ WARNING: CPU exceeded limit!"
           }
