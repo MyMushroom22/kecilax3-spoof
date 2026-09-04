@@ -1,52 +1,11 @@
-name: Container Max CPU Stress Test (Limit 20% - Python)
-
-on: 
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: windows-2022
-    timeout-minutes: 15
-    steps:
-      - name: Prepare Python Stress Script
-        shell: pwsh
-        run: |
-          Write-Host "Generating stress.py..."
-          @'
-          import time
-          import threading
-          import os
-
-          def cpu_stress():
-              while True:
-                  # استهلاك CPU عالي مع حسابات رياضية
-                  for i in range(1000000):
-                      _ = i ** 0.5
-                  # نوم قصير جدًا لمنع التجميد لكن مع الحفاظ على استهلاك مرتفع
-                  time.sleep(0.001)
-
-          if __name__ == "__main__":
-              print("[CONTAINER] Starting CPU stress test with Python...")
-              threads = []
-              for i in range(4):
-                  t = threading.Thread(target=cpu_stress)
-                  t.daemon = True
-                  t.start()
-                  threads.append(t)
-              print("[CONTAINER] Stress test running. Press Ctrl+C to stop.")
-              while True:
-                  time.sleep(1)
-          '@ | Out-File -FilePath stress.py -Encoding ASCII
-
-      - name: Run Stress Test in Container with Python
-        shell: pwsh
-        run: |
-          Write-Host "🚀 Launching container with CPU limit 20% (Python stress)..."
-          docker run --rm `
-            --isolation=process `
-            --cpus=0.2 `
-            --memory=2G `
-            -v "${PWD}:C:/app" `
-            -w C:/app `
-            python:3.12-windowsservercore-ltsc2022 `
-            python stress.py
+- name: Run Real Stress Test
+  shell: pwsh
+  run: |
+    docker run --rm `
+      --isolation=process `
+      --cpus=0.2 `
+      --memory=2G `
+      -v "${PWD}:C:/app" `
+      -w C:/app `
+      python:3.12-windowsservercore-ltsc2022 `
+      python -c "import time; while True: [i**0.5 for i in range(1000000)]"
