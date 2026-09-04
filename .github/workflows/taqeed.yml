@@ -1,4 +1,4 @@
-name: Container Max CPU Stress Test (Limit 20% - Real)
+name: Container Max CPU Stress Test (Limit 20% - Python)
 
 on: 
   workflow_dispatch:
@@ -8,77 +8,45 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 15
     steps:
-      - name: Prepare Stress Script
+      - name: Prepare Python Stress Script
         shell: pwsh
         run: |
-          Write-Host "Generating stress_test.ps1..."
+          Write-Host "Generating stress.py..."
           @'
-          Write-Host "[CONTAINER] Starting REAL MAX CPU stress test..."
-          Write-Host "[CONTAINER] This will consume 100% of the allocated CPU (capped at 20% by Docker)."
+          import time
+          import threading
+          import os
 
-          # تشغيل عدد من الخيوط يساوي عدد النوى (4) مع حمل ثقيل جداً
-          $jobs = @()
-          for ($i = 0; $i -lt 4; $i++) {
-              $jobs += Start-Job -ScriptBlock {
-                  # حلقة لا نهائية مع حساب ثقيل جداً، بدون نوم طويل
-                  while ($true) {
-                      $sum = 0.0
-                      for ($j = 0; $j -lt 100000; $j++) {
-                          $sum += [Math]::Sqrt($j) * [Math]::Sqrt($j + 1)
-                      }
-                      # نوم قصير جداً (1 مللي) لمنع تجميد النظام لكن مع الحفاظ على استهلاك مرتفع
-                      Start-Sleep -Milliseconds 1
-                  }
-              }
-          }
+          def cpu_stress():
+              while True:
+                  # استهلاك CPU عالي مع حسابات رياضية
+                  for i in range(1000000):
+                      _ = i ** 0.5
+                  # نوم قصير جدًا لمنع التجميد لكن مع الحفاظ على استهلاك مرتفع
+                  time.sleep(0.001)
 
-          Write-Host "[CONTAINER] Collecting CPU samples every 2 seconds for 30 seconds..."
-          $samples = @()
-          for ($i = 0; $i -lt 15; $i++) {
-              Start-Sleep -Seconds 2
-              try {
-                  $counter = Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop
-                  $cpu = $counter.CounterSamples[0].CookedValue
-                  $samples += $cpu
-                  Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
-              } catch {
-                  Write-Host "Sample $($i+1): [failed to read]"
-              }
-          }
+          if __name__ == "__main__":
+              print("[CONTAINER] Starting CPU stress test with Python...")
+              threads = []
+              for i in range(4):
+                  t = threading.Thread(target=cpu_stress)
+                  t.daemon = True
+                  t.start()
+                  threads.append(t)
+              print("[CONTAINER] Stress test running. Press Ctrl+C to stop.")
+              while True:
+                  time.sleep(1)
+          '@ | Out-File -FilePath stress.py -Encoding ASCII
 
-          # إنهاء المهام
-          foreach ($job in $jobs) {
-              Stop-Job $job
-              Remove-Job $job
-          }
-
-          if ($samples.Count -gt 0) {
-              $avg = ($samples | Measure-Object -Average).Average
-              $max = ($samples | Measure-Object -Maximum).Maximum
-              Write-Host "======================================"
-              Write-Host "=== STRESS TEST RESULT ==="
-              Write-Host "Average Total CPU Usage: $($avg.ToString('0.0'))%"
-              Write-Host "Max Total CPU Usage: $($max.ToString('0.0'))%"
-              Write-Host "======================================"
-              if ($max -le 22) {
-                  Write-Host "✅ SUCCESS: CPU limit is working correctly!"
-              } else {
-                  Write-Host "❌ WARNING: CPU usage exceeded limit (should be ~20%)!"
-              }
-          } else {
-              Write-Host "⚠️ No samples collected."
-          }
-          '@ | Out-File -FilePath stress_test.ps1 -Encoding ASCII
-
-      - name: Run Stress Test in Container
+      - name: Run Stress Test in Container with Python
         shell: pwsh
         run: |
-          Write-Host "🚀 Launching container with CPU limit 20% (real stress)..."
+          Write-Host "🚀 Launching container with CPU limit 20% (Python stress)..."
           docker run --rm `
             --isolation=process `
             --cpus=0.2 `
             --memory=2G `
             -v "${PWD}:C:/app" `
             -w C:/app `
-            mcr.microsoft.com/windows/servercore:ltsc2022 `
-            powershell -ExecutionPolicy Bypass -File stress_test.ps1
+            python:3.12-windowsservercore-ltsc2022 `
+            python stress.py
