@@ -1,4 +1,4 @@
-name: Container CPU Limit Test (No Chrome)
+name: Container Max CPU Stress Test (Limit 20%)
 
 on: 
   workflow_dispatch:
@@ -6,26 +6,69 @@ on:
 jobs:
   build:
     runs-on: windows-2022
+    timeout-minutes: 15
     steps:
       # -----------------------------------------------------------
-      # خطوة 1: كتابة سكربت بسيط يستمر للأبد (ping -t)
+      # خطوة 1: كتابة سكربت اختبار الإجهاد
       # -----------------------------------------------------------
-      - name: Prepare Container Script
+      - name: Prepare Stress Script
         shell: pwsh
         run: |
+          Write-Host "Generating stress_test.ps1..."
           @'
-          @echo off
-          echo [CONTAINER] Starting infinite ping loop...
-          ping -t 127.0.0.1
-          '@ | Out-File -FilePath test_loop.cmd -Encoding ASCII
+          Write-Host "[CONTAINER] Starting MAX CPU stress test..."
+          Write-Host "[CONTAINER] This will consume as much CPU as allowed (capped at 20% by Docker)."
+
+          # تشغيل 4 خيوط تستهلك CPU (لأقصى حمل داخل الحاوية)
+          $jobs = @()
+          for ($i = 0; $i -lt 4; $i++) {
+              $jobs += Start-Job -ScriptBlock {
+                  while ($true) {
+                      $sum = 0
+                      for ($j = 0; $j -lt 10000000; $j++) {
+                          $sum += [Math]::Sqrt($j)
+                      }
+                      Start-Sleep -Milliseconds 100
+                  }
+              }
+          }
+
+          # أخذ عينات من استهلاك CPU للمضيف (لأن الحاوية مقيدة)
+          Write-Host "[CONTAINER] Sampling CPU usage every 3 seconds for 30 seconds..."
+          $samples = @()
+          for ($i = 0; $i -lt 10; $i++) {
+              Start-Sleep -Seconds 3
+              # استخدام typeperf لقياس إجمالي استهلاك المعالج (أكثر دقة من Get-Counter)
+              $cpu = (typeperf "\Processor(_Total)\% Processor Time" -sc 1 | Select-String -Pattern "\d+\.\d+" | ForEach-Object { $_.Matches.Value }) -as [double]
+              $samples += $cpu
+              Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
+          }
+
+          # إنهاء مهام الإجهاد
+          foreach ($job in $jobs) {
+              Stop-Job $job
+              Remove-Job $job
+          }
+
+          # حساب الإحصائيات
+          $avg = ($samples | Measure-Object -Average).Average
+          $max = ($samples | Measure-Object -Maximum).Maximum
+
+          Write-Host "======================================"
+          Write-Host "=== STRESS TEST RESULT ==="
+          Write-Host "Average Total CPU Usage: $($avg.ToString('0.0'))%"
+          Write-Host "Max Total CPU Usage: $($max.ToString('0.0'))%"
+          Write-Host "======================================"
+          Write-Host "If Max is around 20% (or slightly above due to system overhead), the limit works perfectly!"
+          '@ | Out-File -FilePath stress_test.ps1 -Encoding ASCII
 
       # -----------------------------------------------------------
-      # خطوة 2: تشغيل الحاوية مع تقييد 20% وتشغيل ping -t
+      # خطوة 2: تشغيل الحاوية مع تقييد 20% وتنفيذ اختبار الإجهاد
       # -----------------------------------------------------------
-      - name: Run Container with CPU 20% (Keep Alive)
+      - name: Run Stress Test in Container
         shell: pwsh
         run: |
-          Write-Host "🚀 Launching container with CPU limit 20%..."
+          Write-Host "🚀 Launching container with CPU limit 20% (stress test)..."
           
           docker run --rm `
             --isolation=process `
@@ -34,4 +77,4 @@ jobs:
             -v "${PWD}:C:/app" `
             -w C:/app `
             mcr.microsoft.com/windows/servercore:ltsc2022 `
-            cmd /c test_loop.cmd
+            powershell -File stress_test.ps1
