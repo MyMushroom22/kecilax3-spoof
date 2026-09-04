@@ -1,4 +1,4 @@
-name: Container Real Stress Test
+name: CPU Cap Test - Final
 
 on: 
   workflow_dispatch:
@@ -9,77 +9,67 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      # -----------------------------------------------------------
-      # خطوة 1: كتابة سكربت اختبار الإجهاد (PowerShell)
-      # -----------------------------------------------------------
-      - name: Prepare Stress Script
+      - name: Run CPU Stress in Container
         shell: pwsh
         run: |
-          @'
-          Write-Host "[CONTAINER] Starting REAL CPU stress test..."
-          Write-Host "[CONTAINER] This will consume 100% of the allocated CPU (capped at 20% by Docker)."
-
-          # تشغيل 4 خيوط بايثون تستهلك CPU بكثافة
-          $jobs = @()
-          for ($i = 0; $i -lt 4; $i++) {
-              $jobs += Start-Job -ScriptBlock {
-                  # استخدام بايثون لحلقة لا نهائية كثيفة
-                  python -c "while True: [i**0.5 for i in range(1000000)]"
-              }
-          }
-
-          Write-Host "[CONTAINER] Collecting CPU samples every 2 seconds for 30 seconds..."
-          $samples = @()
-
-          for ($i = 0; $i -lt 15; $i++) {
-              Start-Sleep -Seconds 2
-              try {
-                  $counter = Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop
-                  $cpu = $counter.CounterSamples[0].CookedValue
-                  $samples += $cpu
-                  Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
-              } catch {
-                  Write-Host "Sample $($i+1): [failed to read]"
-              }
-          }
-
-          # إنهاء مهام الإجهاد
-          foreach ($job in $jobs) {
-              Stop-Job $job
-              Remove-Job $job
-          }
-
-          if ($samples.Count -gt 0) {
-              $avg = ($samples | Measure-Object -Average).Average
-              $max = ($samples | Measure-Object -Maximum).Maximum
-              Write-Host "======================================"
-              Write-Host "=== STRESS TEST RESULT ==="
-              Write-Host "Average Total CPU Usage: $($avg.ToString('0.0'))%"
-              Write-Host "Max Total CPU Usage: $($max.ToString('0.0'))%"
-              Write-Host "======================================"
-              if ($max -le 22) {
-                  Write-Host "✅ SUCCESS: CPU limit is working correctly!"
-              } else {
-                  Write-Host "❌ WARNING: CPU usage exceeded limit (should be ~20%)!"
-              }
-          } else {
-              Write-Host "⚠️ No samples collected."
-          }
-          '@ | Out-File -FilePath stress_test.ps1 -Encoding ASCII
-
-      # -----------------------------------------------------------
-      # خطوة 2: تشغيل الحاوية مع تقييد 20%
-      # -----------------------------------------------------------
-      - name: Run Stress Test in Container
-        shell: pwsh
-        run: |
-          Write-Host "🚀 Launching container with CPU limit 20% (real stress)..."
+          Write-Host "🚀 Starting container with CPU limit 20%..."
           
           docker run --rm `
             --isolation=process `
             --cpus=0.2 `
             --memory=2G `
-            -v "${PWD}:C:/app" `
-            -w C:/app `
-            python:3.12-windowsservercore-ltsc2022 `
-            powershell -ExecutionPolicy Bypass -File stress_test.ps1
+            mcr.microsoft.com/windows/servercore:ltsc2022 `
+            powershell -Command @"
+            Write-Host '[CONTAINER] Starting CPU stress test (4 threads, no sleep)...'
+            Write-Host '[CONTAINER] This will push CPU to the 20% cap.'
+
+            # تشغيل 4 خيوط (لضمان استهلاك كل الحصة المخصصة)
+            $jobs = @()
+            1..4 | ForEach-Object {
+                $jobs += Start-Job -ScriptBlock {
+                    # حلقة لا نهائية من العمليات الحسابية الثقيلة (بدون نوم)
+                    while ($true) {
+                        $sum = 0.0
+                        for ($i = 0; $i -lt 1000000; $i++) {
+                            $sum += [Math]::Sqrt($i)
+                        }
+                    }
+                }
+            }
+
+            Write-Host '[CONTAINER] Collecting CPU samples every 2 seconds for 60 seconds...'
+            $samples = @()
+            for ($i = 0; $i -lt 30; $i++) {
+                Start-Sleep -Seconds 2
+                try {
+                    $cpu = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop).CounterSamples[0].CookedValue
+                    $samples += $cpu
+                    Write-Host "Sample $($i+1): $($cpu.ToString('0.0'))%"
+                } catch {
+                    Write-Host "Sample $($i+1): [error]"
+                }
+            }
+
+            # إنهاء المهام
+            foreach ($job in $jobs) {
+                Stop-Job $job
+                Remove-Job $job
+            }
+
+            if ($samples.Count -gt 0) {
+                $avg = ($samples | Measure-Object -Average).Average
+                $max = ($samples | Measure-Object -Maximum).Maximum
+                Write-Host "======================================"
+                Write-Host "=== FINAL RESULT ==="
+                Write-Host "Average Total CPU Usage: $($avg.ToString('0.0'))%"
+                Write-Host "Maximum Total CPU Usage: $($max.ToString('0.0'))%"
+                Write-Host "======================================"
+                if ($max -le 22) {
+                    Write-Host "✅ SUCCESS: CPU limit is working correctly!"
+                } else {
+                    Write-Host "❌ WARNING: CPU exceeded limit (should be ~20%)!"
+                }
+            } else {
+                Write-Host "⚠️ No samples collected."
+            }
+"@
