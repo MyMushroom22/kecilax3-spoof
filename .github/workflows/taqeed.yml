@@ -8,24 +8,21 @@ jobs:
     runs-on: windows-2022
     steps:
       # -----------------------------------------------------------
-      # خطوة 1: كتابة سكربت اختبار CPU داخل الحاوية
+      # خطوة 1: كتابة سكربت اختبار CPU (بدون Here-String)
       # -----------------------------------------------------------
       - name: Prepare Test Script
         shell: pwsh
         run: |
-          @'
+          Write-Host "Creating test_cpu.ps1..."
+          
+          $scriptContent = @"
           # test_cpu.ps1
           Write-Host "[CONTAINER] Starting CPU stress test..."
-          
-          # استخدام بايثون (موجود في الصورة؟ لا، لكننا سنثبته بسرعة)
-          # بدلاً من ذلك، نستخدم حلقة PowerShell ثقيلة (لكنها قد لا تستهلك 100% دقيقة).
-          # الأفضل: تثبيت Python بسرعة داخل الحاوية.
-          
+
           Write-Host "[CONTAINER] Installing Python via winget (fast)..."
           winget install Python.Python.3.12 --silent --accept-package-agreements
-          
-          # كتابة سكربت بايثون بسيط يستهلك CPU
-          @'
+
+          $pythonCode = @"
           import time
           import os
           print(f"PID: {os.getpid()}")
@@ -34,22 +31,24 @@ jobs:
               for i in range(1000000):
                   _ = i ** 0.5
               time.sleep(0.1)
-          '@ | Out-File -FilePath "cpu_burn.py" -Encoding UTF8
+          "@
 
-          # تشغيل سكربت CPU
+          $pythonCode | Out-File -FilePath "cpu_burn.py" -Encoding UTF8
+
           Write-Host "[CONTAINER] Running CPU burner (should be limited to 20% by Docker)..."
           python cpu_burn.py
-          '@ | Out-File -FilePath "test_cpu.ps1" -Encoding UTF8
+          "@
+
+          $scriptContent | Out-File -FilePath "test_cpu.ps1" -Encoding UTF8
 
       # -----------------------------------------------------------
-      # خطوة 2: تشغيل الحاوية وتقييد CPU إلى 20%
+      # خطوة 2: تشغيل الحاوية مع تقييد 20%
       # -----------------------------------------------------------
       - name: Run Container with CPU 20% (Test Only)
         shell: pwsh
         run: |
           Write-Host "🚀 Launching container with CPU limit 20% (fast test)..."
           
-          # --isolation=process، --cpus=0.2
           docker run --rm `
             --isolation=process `
             --cpus=0.2 `
