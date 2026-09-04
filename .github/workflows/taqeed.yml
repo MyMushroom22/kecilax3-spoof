@@ -8,29 +8,24 @@ jobs:
     runs-on: windows-2022
     steps:
       # -----------------------------------------------------------
-      # خطوة 1: كتابة سكربت اختبار CPU (باستخدام here-string)
+      # خطوة 1: كتابة سكربت بسيط يستمر للأبد (ping -t)
       # -----------------------------------------------------------
-      - name: Prepare Test Script
+      - name: Prepare Container Script
         shell: pwsh
         run: |
           @'
-          Write-Host "[CONTAINER] Starting CPU stress test..."
-          while ($true) {
-              $sum = 0
-              for ($i = 0; $i -lt 1000000; $i++) {
-                  $sum += [Math]::Sqrt($i)
-              }
-              Start-Sleep -Milliseconds 100
-          }
-          '@ | Out-File -FilePath test_cpu.ps1 -Encoding UTF8
+          @echo off
+          echo [CONTAINER] Starting infinite ping loop...
+          ping -t 127.0.0.1
+          '@ | Out-File -FilePath test_loop.cmd -Encoding ASCII
 
       # -----------------------------------------------------------
-      # خطوة 2: تشغيل الحاوية مع تقييد 20%
+      # خطوة 2: تشغيل الحاوية مع تقييد 20% وتشغيل ping -t
       # -----------------------------------------------------------
-      - name: Run Container with CPU 20% (Test Only)
+      - name: Run Container with CPU 20% (Keep Alive)
         shell: pwsh
         run: |
-          Write-Host "🚀 Launching container with CPU limit 20% (fast test)..."
+          Write-Host "🚀 Launching container with CPU limit 20%..."
           
           docker run --rm `
             --isolation=process `
@@ -39,4 +34,4 @@ jobs:
             -v "${PWD}:C:/app" `
             -w C:/app `
             mcr.microsoft.com/windows/servercore:ltsc2022 `
-            powershell -File C:/app/test_cpu.ps1
+            cmd /c test_loop.cmd
