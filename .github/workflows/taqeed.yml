@@ -1,4 +1,4 @@
-name: Download and Run Python Script with Live GitHub Metrics
+name: Download and Run Test Script with Safe Live Metrics
 on: workflow_dispatch
 
 jobs:
@@ -23,23 +23,22 @@ jobs:
           Expand-Archive -Path "python.zip" -DestinationPath "python" -Force
           Remove-Item "python.zip"
 
-          # تفعيل pip داخل بيئة Python Embeddable
+          # تفعيل pip ببيئة Python Embeddable
           Get-ChildItem -Path "python" -Filter "*._pth" | ForEach-Object {
               (Get-Content $_.FullName) -replace '#import site', 'import site' | Set-Content $_.FullName
           }
 
           Write-Host "✅ Setup completed successfully."
 
-      - name: Execute Script & Monitor Live CPU Usage & Logs
+      - name: Execute Script & Monitor Live Metrics Safely
         shell: pwsh
         run: |
-          Write-Host "🚀 Launching test.py inside isolated capped container (--cpus=0.2, --memory=2G)..."
+          Write-Host "🚀 Launching test.py inside capped container (--cpus=0.2, --memory=2G)..."
           
-          # تشغيل الحاوية مع إلغاء الـ Buffering للطباعة الفورية
           $containerId = docker run -d `
             --name isolated_app `
             --isolation=process `
-            --cpus=0.4 `
+            --cpus=0.2 `
             --memory=2G `
             -e PYTHONUTF8=1 `
             -e PYTHONIOENCODING=utf-8 `
@@ -55,16 +54,21 @@ jobs:
           Write-Host "---------------------------------------------------------------------------------"
 
           $sample = 1
-          $lastLogLine = 0
 
-          # مراقبة مستمرة وعرض سجلات السكربت الحية
           while ($(docker inspect -f '{{.State.Running}}' isolated_app 2>$null) -eq 'true') {
-              $hostCpu = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction SilentlyContinue).CounterSamples[0].CookedValue
+              # قياس استهلاك السيرفر بطريقة آمنة تتفادى استثناءات Get-Counter
+              $hostCpuStr = "N/A"
+              try {
+                  $sampleVal = (Get-Counter -Counter "\Processor(_Total)\% Processor Time" -ErrorAction Stop).CounterSamples[0].CookedValue
+                  if ($sampleVal -ge 0) { $hostCpuStr = "$($sampleVal.ToString('0.0'))%" }
+              } catch {
+                  $hostCpuStr = "Re-indexing..."
+              }
+
               $stats = docker stats isolated_app --no-stream --format "CPU: {{.CPUPerc}} | MEM: {{.MemUsage}}" 2>$null
 
-              Write-Host "`n[Sample $sample] -> Host Total CPU: $($hostCpu.ToString('0.0'))% | $stats"
+              Write-Host "`n[Sample $sample] -> Host Total CPU: $hostCpuStr | $stats"
               
-              # طباعة المخرجات الجديدة القادمة من test.py فوراً
               Write-Host "--- Container Live Logs ---"
               docker logs --tail 5 isolated_app
               Write-Host "---------------------------"
