@@ -1,4 +1,4 @@
-name: Ultimate-1D-Counter-No Script (Container Test)
+name: Container CPU Limit Test (No Chrome)
 
 on: 
   workflow_dispatch:
@@ -8,58 +8,53 @@ jobs:
     runs-on: windows-2022
     steps:
       # -----------------------------------------------------------
-      # خطوة 0: تحضير السكربت الداخلي الذي سيعمل داخل الحاوية
+      # خطوة 1: كتابة سكربت اختبار CPU داخل الحاوية
       # -----------------------------------------------------------
-      - name: Prepare Internal Script
+      - name: Prepare Test Script
         shell: pwsh
         run: |
           @'
-          # container_script.ps1
-          Write-Host "[CONTAINER] Starting container script..."
-
-          # تثبيت Chrome داخل الحاوية
-          Write-Host "[CONTAINER] Downloading Chrome..."
-          Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile "chrome_installer.exe"
-          Start-Process -FilePath "chrome_installer.exe" -Args "/silent /install" -Wait
-
-          # تثبيت CRD Host
-          Write-Host "[CONTAINER] Downloading CRD Host..."
-          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile "crd.msi"
-          Start-Process -FilePath "msiexec.exe" -Args "/i crd.msi /quiet /qn" -Wait
-
-          # تشغيل CRD مع الكود والـ PIN من المتغيرات البيئية
-          $exePath = "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe"
-          $UniqueName = "${{ github.actor }}-Machine-Container"
+          # test_cpu.ps1
+          Write-Host "[CONTAINER] Starting CPU stress test..."
           
-          Write-Host "[CONTAINER] Starting CRD service with name: $UniqueName"
-          & $exePath --code="$env:CRD_CODE" --redirect-url="https://remotedesktop.google.com/_/oauthredirect" --name="$UniqueName" --pin=$env:CRD_PIN
+          # استخدام بايثون (موجود في الصورة؟ لا، لكننا سنثبته بسرعة)
+          # بدلاً من ذلك، نستخدم حلقة PowerShell ثقيلة (لكنها قد لا تستهلك 100% دقيقة).
+          # الأفضل: تثبيت Python بسرعة داخل الحاوية.
+          
+          Write-Host "[CONTAINER] Installing Python via winget (fast)..."
+          winget install Python.Python.3.12 --silent --accept-package-agreements
+          
+          # كتابة سكربت بايثون بسيط يستهلك CPU
+          @'
+          import time
+          import os
+          print(f"PID: {os.getpid()}")
+          print("Starting CPU burn loop...")
+          while True:
+              for i in range(1000000):
+                  _ = i ** 0.5
+              time.sleep(0.1)
+          '@ | Out-File -FilePath "cpu_burn.py" -Encoding UTF8
 
-          # البقاء حياً (لأن CRD يعمل في الخلفية، نبقى نائمين)
-          Write-Host "[CONTAINER] Keeping container alive..."
-          while ($true) { Start-Sleep -Seconds 300 }
-          '@ | Out-File -FilePath "container_script.ps1" -Encoding UTF8
+          # تشغيل سكربت CPU
+          Write-Host "[CONTAINER] Running CPU burner (should be limited to 20% by Docker)..."
+          python cpu_burn.py
+          '@ | Out-File -FilePath "test_cpu.ps1" -Encoding UTF8
 
       # -----------------------------------------------------------
-      # خطوة 1: تشغيل الحاوية المعزولة مع تحديد 20% CPU
+      # خطوة 2: تشغيل الحاوية وتقييد CPU إلى 20%
       # -----------------------------------------------------------
-      - name: Run Isolated Container with CPU 20%
+      - name: Run Container with CPU 20% (Test Only)
         shell: pwsh
-        env:
-          CRD_CODE: ${{ secrets.CRD_CODE }}
-          CRD_PIN: ${{ secrets.CRD_PIN }}
         run: |
-          Write-Host "🚀 Launching Windows Container with CPU limit 20%..."
-
-          # استخدام صورة Windows Server Core LTSC 2022
+          Write-Host "🚀 Launching container with CPU limit 20% (fast test)..."
+          
+          # --isolation=process، --cpus=0.2
           docker run --rm `
             --isolation=process `
             --cpus=0.2 `
-            --memory=4G `
-            -v "${PWD}:C:/host" `
-            -w C:/host `
-            -e CRD_CODE="$env:CRD_CODE" `
-            -e CRD_PIN="$env:CRD_PIN" `
+            --memory=2G `
+            -v "${PWD}:C:/app" `
+            -w C:/app `
             mcr.microsoft.com/windows/servercore:ltsc2022 `
-            powershell -File container_script.ps1
-
-          Write-Host "✅ Container finished execution (should not happen)."
+            powershell -File test_cpu.ps1
